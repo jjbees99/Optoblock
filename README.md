@@ -1,6 +1,6 @@
-# Momentum
+# Optoblock
 
-Momentum, in the Optoblock repo, is a personal desktop productivity app for tasks, projects, shopping, recipes, unwind routines, finance tracking, and quick daily focus.
+Optoblock is a personal desktop productivity app for tasks, projects, shopping, recipes, unwind routines, finance tracking, and quick daily focus.
 
 The app is built with Python and PySide6. It saves data locally in SQLite and supports JSON export/import for backups.
 

@@ -34,7 +34,7 @@ class MainWindow(QMainWindow):
     def __init__(self, context: AppContext) -> None:
         super().__init__()
         self.context = context
-        self.setWindowTitle("Momentum")
+        self.setWindowTitle("Optoblock")
         self.resize(1320, 860)
         self.module_checks: dict[str, QCheckBox] = {}
         self.active_modules = context.settings.startup_modules() or ["Dashboard", "Tasks", "Projects", "Finance"]

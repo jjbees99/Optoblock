@@ -97,7 +97,7 @@ class ShoppingPage(Compartment):
 
     def email_list(self) -> None:
         recipient = "jakebees00@gmail.com"
-        subject = quote("Momentum shopping list")
+        subject = quote("Optoblock shopping list")
         body = quote(self.context.shopping.email_body())
         url = QUrl(f"mailto:{recipient}?subject={subject}&body={body}")
         opened = QDesktopServices.openUrl(url)

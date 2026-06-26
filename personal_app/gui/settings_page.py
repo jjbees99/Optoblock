@@ -49,14 +49,14 @@ class SettingsPage(Compartment):
             self.theme_changed()
 
     def export_json(self) -> None:
-        path, _ = QFileDialog.getSaveFileName(self, "Export Momentum data", self.backup.text() or "momentum-backup.json", "JSON (*.json)")
+        path, _ = QFileDialog.getSaveFileName(self, "Export Optoblock data", self.backup.text() or "optoblock-backup.json", "JSON (*.json)")
         if path:
             self.context.storage.export_json(path)
             self.backup.setText(path)
             self.notice.setText("Export complete.")
 
     def import_json(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(self, "Import Momentum data", self.backup.text(), "JSON (*.json)")
+        path, _ = QFileDialog.getOpenFileName(self, "Import Optoblock data", self.backup.text(), "JSON (*.json)")
         if path:
             self.context.storage.import_json(path)
             self.notice.setText("Import complete. Restart or refresh modules to see all changes.")

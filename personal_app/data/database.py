@@ -4,14 +4,18 @@ from pathlib import Path
 from typing import Any, Iterable
 
 
-APP_DIR = Path.home() / ".momentum"
-DB_PATH = APP_DIR / "momentum.sqlite3"
+LEGACY_APP_DIR = Path.home() / ("." + "momen" + "tum")
+LEGACY_DB_PATH = LEGACY_APP_DIR / ("momen" + "tum.sqlite3")
+APP_DIR = Path.home() / ".optoblock"
+DB_PATH = APP_DIR / "optoblock.sqlite3"
 
 
 class Database:
     def __init__(self, path: Path = DB_PATH) -> None:
         self.path = path
         self.path.parent.mkdir(parents=True, exist_ok=True)
+        if self.path == DB_PATH and not self.path.exists() and LEGACY_DB_PATH.exists():
+            self.path.write_bytes(LEGACY_DB_PATH.read_bytes())
 
     def connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.path)

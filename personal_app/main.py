@@ -10,8 +10,8 @@ from personal_app.gui.main_window import MainWindow
 
 def run() -> int:
     app = QApplication(sys.argv)
-    app.setApplicationName("Momentum")
-    app.setOrganizationName("PersonalCommandCentre")
+    app.setApplicationName("Optoblock")
+    app.setOrganizationName("Optoblock")
     app.setWindowIcon(QIcon(str(Path(__file__).parent / "assets" / "darg_app_icon.ico")))
 
     context = AppContext.create()
