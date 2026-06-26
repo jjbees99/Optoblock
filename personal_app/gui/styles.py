@@ -71,13 +71,13 @@ QMainWindow, QWidget#Root {
 }
 QFrame#Table {
     background: __TABLE__;
-    border: 1px solid #33454a;
-    border-radius: 18px;
+    border: 1px solid #3b5057;
+    border-radius: 22px;
 }
 QFrame#Compartment {
-    background: #161b20;
-    border: 1px solid #2f4147;
-    border-radius: 8px;
+    background: #171d22;
+    border: 1px solid #34484f;
+    border-radius: 10px;
 }
 QFrame#Compartment[dragging="true"] {
     border: 2px solid __ACCENT__;
@@ -95,6 +95,11 @@ QLabel#DragGrip {
     color: __ACCENT__;
     font-weight: 800;
 }
+QLabel#ResizeGrip {
+    color: #6f858d;
+    font-size: 8pt;
+    font-weight: 700;
+}
 QLineEdit, QTextEdit, QComboBox, QDateEdit, QSpinBox {
     background: #0f1418;
     color: #f8efe2;
@@ -108,14 +113,15 @@ QPushButton {
     background: __ACCENT__;
     color: #071010;
     border: none;
-    border-radius: 6px;
+    border-radius: 8px;
     padding: 7px 12px;
     font-weight: 650;
 }
 QPushButton:hover { background: #89e3db; }
 QPushButton#Subtle {
-    background: #242d31;
+    background: #222c31;
     color: #f8efe2;
+    border: 1px solid #33484f;
 }
 QPushButton#Danger {
     background: #a24b45;
@@ -140,10 +146,10 @@ QTableWidget::item:selected, QListWidget::item:selected {
     color: #071010;
 }
 QToolButton {
-    background: #161b20;
+    background: #171d22;
     color: #f8efe2;
     border: 1px solid #2f4147;
-    border-radius: 8px;
+    border-radius: 10px;
     padding: 8px 14px;
     font-weight: 650;
 }

@@ -1,10 +1,9 @@
 from collections.abc import Callable
+import json
 
-from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QCheckBox,
     QFrame,
-    QGridLayout,
     QHBoxLayout,
     QMainWindow,
     QMenu,
@@ -47,10 +46,9 @@ class MainWindow(QMainWindow):
         self._build_top_bar()
         self.table = QFrame()
         self.table.setObjectName("Table")
-        self.table_layout = QGridLayout(self.table)
-        self.table_layout.setContentsMargins(14, 14, 14, 14)
-        self.table_layout.setSpacing(10)
+        self.table.setMinimumHeight(680)
         self.outer.addWidget(self.table, 1)
+        self.widgets_by_module: dict[str, QWidget] = {}
         self.apply_theme()
         self.rebuild_table()
 
@@ -100,29 +98,19 @@ class MainWindow(QMainWindow):
         }[name]
 
     def rebuild_table(self) -> None:
-        compact = self.context.settings.get("compact_mode") == "Compact"
-        margin = 8 if compact else 14
-        spacing = 8 if compact else 10
-        self.table_layout.setContentsMargins(margin, margin, margin, margin)
-        self.table_layout.setSpacing(spacing)
-        while self.table_layout.count():
-            item = self.table_layout.takeAt(0)
-            widget = item.widget()
-            if widget:
-                widget.deleteLater()
+        for widget in list(self.widgets_by_module.values()):
+            widget.deleteLater()
+        self.widgets_by_module.clear()
+        geometries = self.load_geometries()
         for index, module in enumerate(self.active_modules):
             widget = self.module_factory(module)()
             widget.dropped.connect(self.swap_module_at_drop)
-            columns = self.column_count()
-            row = index // columns
-            col = index % columns
-            self.table_layout.addWidget(widget, row, col)
-        columns = self.column_count()
-        rows = max(1, (len(self.active_modules) + columns - 1) // columns)
-        for col in range(columns):
-            self.table_layout.setColumnStretch(col, 1)
-        for row in range(rows):
-            self.table_layout.setRowStretch(row, 1)
+            widget.geometry_changed.connect(self.save_widget_geometry)
+            widget.setParent(self.table)
+            x, y, width, height = geometries.get(module, self.default_geometry(index))
+            widget.setGeometry(x, y, width, height)
+            widget.show()
+            self.widgets_by_module[module] = widget
 
     def column_count(self) -> int:
         count = len(self.active_modules)
@@ -145,7 +133,29 @@ class MainWindow(QMainWindow):
             return
         self.active_modules[source_index], self.active_modules[target_index] = self.active_modules[target_index], self.active_modules[source_index]
         self.save_layout()
-        self.rebuild_table()
+
+    def default_geometry(self, index: int) -> tuple[int, int, int, int]:
+        width = 390
+        height = 300
+        gap = 16
+        columns = max(1, min(3, max(1, self.table.width() // (width + gap))))
+        return 18 + (index % columns) * (width + gap), 18 + (index // columns) * (height + gap), width, height
+
+    def load_geometries(self) -> dict[str, tuple[int, int, int, int]]:
+        raw = self.context.settings.get("workspace_geometries") or "{}"
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError:
+            return {}
+        return {name: tuple(values) for name, values in data.items() if isinstance(values, list) and len(values) == 4}
+
+    def save_widget_geometry(self, module: str) -> None:
+        widget = self.widgets_by_module.get(module)
+        if not widget:
+            return
+        data = {name: list(values) for name, values in self.load_geometries().items()}
+        data[module] = [widget.x(), widget.y(), widget.width(), widget.height()]
+        self.context.settings.set("workspace_geometries", json.dumps(data))
 
     def apply_theme(self) -> None:
         theme = self.context.settings.get("theme") or "Dark"

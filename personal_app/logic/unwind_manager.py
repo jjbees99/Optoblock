@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import random
 
 from personal_app.data.database import Database
@@ -50,6 +52,26 @@ class UnwindManager:
 
     def delete(self, item_id: int) -> None:
         self.db.execute("DELETE FROM unwind_items WHERE id=?", (item_id,))
+
+    def replace_all(self, rows: list[dict]) -> None:
+        with self.db.connect() as conn:
+            conn.execute("DELETE FROM unwind_items")
+            conn.executemany(
+                """
+                INSERT INTO unwind_items (name, activity_type, estimated_time, done_today)
+                VALUES (?, ?, ?, ?)
+                """,
+                [
+                    (
+                        row.get("name", ""),
+                        row.get("activity_type", "recovery"),
+                        row.get("estimated_time", "15 min"),
+                        int(row.get("done_today", 0)),
+                    )
+                    for row in rows
+                ],
+            )
+            conn.commit()
 
     def suggest(self, activity_type: str = "Any", estimated_time: str = "Any") -> dict | None:
         rows = [row for row in self.list() if not row["done_today"]]
