@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from personal_app.data.database import Database
 
 
@@ -46,6 +48,28 @@ class ShoppingManager:
 
     def delete(self, item_id: int) -> None:
         self.db.execute("DELETE FROM shopping_items WHERE id=?", (item_id,))
+
+    def replace_all(self, rows: list[dict]) -> None:
+        with self.db.connect() as conn:
+            conn.execute("DELETE FROM shopping_items")
+            conn.executemany(
+                """
+                INSERT INTO shopping_items (name, quantity, category, bought, list_type, archived)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                [
+                    (
+                        row.get("name", ""),
+                        max(1, int(row.get("quantity") or 1)),
+                        row.get("category", ""),
+                        int(row.get("bought", 0)),
+                        row.get("list_type", "Grocery"),
+                        int(row.get("archived", 0)),
+                    )
+                    for row in rows
+                ],
+            )
+            conn.commit()
 
     def email_body(self) -> str:
         lines = ["Shopping List", ""]

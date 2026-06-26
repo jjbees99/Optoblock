@@ -46,6 +46,7 @@ class Database:
                     status TEXT DEFAULT 'Idea',
                     next_action TEXT DEFAULT '',
                     next_action_done INTEGER DEFAULT 0,
+                    progress_colour TEXT DEFAULT 'Red',
                     created_at TEXT DEFAULT CURRENT_TIMESTAMP
                 );
                 CREATE TABLE IF NOT EXISTS shopping_items (
@@ -92,6 +93,12 @@ class Database:
                 );
                 """
             )
+            self._ensure_column(conn, "projects", "progress_colour", "TEXT DEFAULT 'Red'")
+
+    def _ensure_column(self, conn: sqlite3.Connection, table: str, column: str, definition: str) -> None:
+        columns = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+        if column not in columns:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
 
     def all(self, query: str, params: Iterable[Any] = ()) -> list[dict[str, Any]]:
         with self.connect() as conn:

@@ -1,104 +1,150 @@
 from urllib.parse import quote
 
-from PySide6.QtCore import QUrl
+from PySide6.QtCore import Qt, QUrl
 from PySide6.QtGui import QDesktopServices
-from PySide6.QtWidgets import QHBoxLayout, QLabel, QListWidget, QListWidgetItem, QPushButton, QTabWidget, QWidget, QVBoxLayout
+from PySide6.QtWidgets import QAbstractItemView, QComboBox, QHBoxLayout, QLabel, QPushButton, QTableWidget, QTableWidgetItem
 
 from personal_app.app import AppContext
-from personal_app.gui.dialogs import ShoppingDialog
 from personal_app.gui.widgets import Compartment, danger_button, subtle_button
+
+
+SHOPPING_COLUMNS = ["Bought", "Item", "Quantity", "Category", "List"]
 
 
 class ShoppingPage(Compartment):
     def __init__(self, context: AppContext) -> None:
-        super().__init__("Shopping", "Two tick-off lists for groceries and Amazon/general purchases.", "Shopping")
+        super().__init__("Shopping", "Spreadsheet shopping list for groceries and Amazon, with email handoff.", "Shopping")
         self.context = context
-        self.tabs = QTabWidget()
-        self.lists: dict[str, QListWidget] = {}
-        for name in ("Grocery", "Amazon"):
-            widget = QWidget()
-            layout = QVBoxLayout(widget)
-            list_widget = QListWidget()
-            layout.addWidget(list_widget)
-            self.tabs.addTab(widget, name)
-            self.lists[name] = list_widget
+        self.table = QTableWidget(0, len(SHOPPING_COLUMNS))
+        self.table.setHorizontalHeaderLabels(SHOPPING_COLUMNS)
+        self.table.setAlternatingRowColors(True)
+        self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.table.horizontalHeader().setStretchLastSection(True)
+        self.table.verticalHeader().setVisible(False)
+
         controls = QHBoxLayout()
-        add = QPushButton("Add")
+        add = QPushButton("Add row")
+        save = subtle_button("Save sheet")
         toggle = subtle_button("Bought")
         move = subtle_button("Move list")
         archive = subtle_button("Archive bought")
         clear = subtle_button("Clear bought")
         email = subtle_button("Email list")
-        delete = danger_button("Delete")
-        add.clicked.connect(self.add)
+        delete = danger_button("Delete row")
+        add.clicked.connect(self.add_row)
+        save.clicked.connect(self.save)
         toggle.clicked.connect(self.toggle)
         move.clicked.connect(self.move)
         archive.clicked.connect(self.archive)
         clear.clicked.connect(self.clear)
         email.clicked.connect(self.email_list)
-        delete.clicked.connect(self.delete)
-        for button in (add, toggle, move, archive, clear, email, delete):
+        delete.clicked.connect(self.delete_row)
+        for button in (add, save, toggle, move, archive, clear, email, delete):
             controls.addWidget(button)
+        controls.addStretch(1)
+
         self.notice = QLabel()
         self.notice.setObjectName("CompartmentDescription")
-        self.layout.addWidget(self.tabs, 1)
+        self.layout.addWidget(self.table, 1)
         self.layout.addLayout(controls)
         self.layout.addWidget(self.notice)
         self.refresh()
 
-    def selected(self) -> dict | None:
-        current = self.lists[self.tabs.tabText(self.tabs.currentIndex())]
-        item = current.currentItem()
-        return item.data(256) if item else None
-
     def refresh(self) -> None:
-        for list_type, widget in self.lists.items():
-            widget.clear()
-            for row in self.context.shopping.list(list_type):
-                marker = "[x]" if row["bought"] else "[ ]"
-                text = f"{marker} {row['quantity']} x {row['name']} | {row['category']}"
-                item = QListWidgetItem(text)
-                item.setData(256, row)
-                widget.addItem(item)
+        self.table.setRowCount(0)
+        for row in self.context.shopping.list(include_archived=False):
+            self.add_row([bool(row["bought"]), row["name"], row["quantity"], row["category"], row["list_type"]])
 
-    def add(self) -> None:
-        dialog = ShoppingDialog()
-        if dialog.exec():
-            name, quantity, category, list_type = dialog.values()
-            if name:
-                self.context.shopping.add(name, quantity, category, list_type)
-                self.refresh()
+    def add_row(self, values: list | None = None) -> None:
+        values = values or [False, "", 1, "", "Grocery"]
+        row_index = self.table.rowCount()
+        self.table.insertRow(row_index)
+
+        bought = QTableWidgetItem("")
+        bought.setFlags(bought.flags() | Qt.ItemIsUserCheckable)
+        bought.setCheckState(Qt.Checked if values[0] else Qt.Unchecked)
+        self.table.setItem(row_index, 0, bought)
+
+        self.table.setItem(row_index, 1, QTableWidgetItem(str(values[1])))
+        quantity = QTableWidgetItem(str(values[2] or 1))
+        quantity.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self.table.setItem(row_index, 2, quantity)
+        self.table.setItem(row_index, 3, QTableWidgetItem(str(values[3])))
+
+        list_type = QComboBox()
+        list_type.addItems(["Grocery", "Amazon"])
+        list_type.setCurrentText(values[4] if values[4] in ("Grocery", "Amazon") else "Grocery")
+        self.table.setCellWidget(row_index, 4, list_type)
+
+    def save(self) -> None:
+        rows = []
+        for row in range(self.table.rowCount()):
+            name = self._cell(row, 1)
+            if not name:
+                continue
+            rows.append(
+                {
+                    "bought": int(self.table.item(row, 0).checkState() == Qt.Checked),
+                    "name": name,
+                    "quantity": self._quantity(row),
+                    "category": self._cell(row, 3),
+                    "list_type": self._combo(row, 4) or "Grocery",
+                    "archived": 0,
+                }
+            )
+        self.context.shopping.replace_all(rows)
+        self.refresh()
 
     def toggle(self) -> None:
-        row = self.selected()
-        if row:
-            self.context.shopping.set_bought(row["id"], not row["bought"])
-            self.refresh()
+        row = self.table.currentRow()
+        if row >= 0:
+            item = self.table.item(row, 0)
+            item.setCheckState(Qt.Unchecked if item.checkState() == Qt.Checked else Qt.Checked)
+            self.save()
 
     def move(self) -> None:
-        row = self.selected()
-        if row:
-            self.context.shopping.move(row["id"])
-            self.refresh()
+        row = self.table.currentRow()
+        if row >= 0:
+            combo = self.table.cellWidget(row, 4)
+            if isinstance(combo, QComboBox):
+                combo.setCurrentText("Amazon" if combo.currentText() == "Grocery" else "Grocery")
+            self.save()
 
     def archive(self) -> None:
+        self.save()
         self.context.shopping.archive_bought()
         self.refresh()
 
     def clear(self) -> None:
+        self.save()
         self.context.shopping.clear_bought()
         self.refresh()
 
-    def delete(self) -> None:
-        row = self.selected()
-        if row:
-            self.context.shopping.delete(row["id"])
-            self.refresh()
+    def delete_row(self) -> None:
+        row = self.table.currentRow()
+        if row >= 0:
+            self.table.removeRow(row)
+            self.save()
 
     def email_list(self) -> None:
+        self.save()
         recipient = "jakebees00@gmail.com"
         subject = quote("Optoblock shopping list")
         body = quote(self.context.shopping.email_body())
         url = QUrl(f"mailto:{recipient}?subject={subject}&body={body}")
         opened = QDesktopServices.openUrl(url)
         self.notice.setText("Opened your email app with the shopping list ready to send." if opened else "Could not open the default email app.")
+
+    def _cell(self, row: int, col: int) -> str:
+        item = self.table.item(row, col)
+        return item.text().strip() if item else ""
+
+    def _combo(self, row: int, col: int) -> str:
+        widget = self.table.cellWidget(row, col)
+        return widget.currentText() if isinstance(widget, QComboBox) else ""
+
+    def _quantity(self, row: int) -> int:
+        try:
+            return max(1, int(self._cell(row, 2)))
+        except ValueError:
+            return 1

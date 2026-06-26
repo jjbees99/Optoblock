@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from personal_app.data.database import Database
 from personal_app.logic.task_manager import TaskManager
 
@@ -15,17 +17,58 @@ class ProjectManager:
             rows = [row for row in rows if needle in " ".join(str(v).lower() for v in row.values())]
         return rows
 
-    def add(self, title: str, description: str = "", category: str = "", status: str = "Idea", next_action: str = "") -> int:
+    def add(
+        self,
+        title: str,
+        description: str = "",
+        category: str = "",
+        status: str = "Idea",
+        next_action: str = "",
+        progress_colour: str = "Red",
+    ) -> int:
         return self.db.execute(
-            "INSERT INTO projects (title, description, category, status, next_action) VALUES (?, ?, ?, ?, ?)",
-            (title, description, category, status, next_action),
+            "INSERT INTO projects (title, description, category, status, next_action, progress_colour) VALUES (?, ?, ?, ?, ?, ?)",
+            (title, description, category, status, next_action, progress_colour),
         )
 
-    def update(self, project_id: int, title: str, description: str, category: str, status: str, next_action: str, done: bool) -> None:
+    def update(
+        self,
+        project_id: int,
+        title: str,
+        description: str,
+        category: str,
+        status: str,
+        next_action: str,
+        done: bool,
+        progress_colour: str = "Red",
+    ) -> None:
         self.db.execute(
-            "UPDATE projects SET title=?, description=?, category=?, status=?, next_action=?, next_action_done=? WHERE id=?",
-            (title, description, category, status, next_action, int(done), project_id),
+            "UPDATE projects SET title=?, description=?, category=?, status=?, next_action=?, next_action_done=?, progress_colour=? WHERE id=?",
+            (title, description, category, status, next_action, int(done), progress_colour, project_id),
         )
+
+    def replace_all(self, rows: list[dict]) -> None:
+        with self.db.connect() as conn:
+            conn.execute("DELETE FROM projects")
+            conn.executemany(
+                """
+                INSERT INTO projects (title, description, category, status, next_action, next_action_done, progress_colour)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                [
+                    (
+                        row.get("title", ""),
+                        row.get("description", ""),
+                        row.get("category", ""),
+                        row.get("status", "Idea"),
+                        row.get("next_action", ""),
+                        int(row.get("next_action_done", 0)),
+                        row.get("progress_colour", "Red"),
+                    )
+                    for row in rows
+                ],
+            )
+            conn.commit()
 
     def archive(self, project_id: int) -> None:
         self.db.execute("UPDATE projects SET status='Archived' WHERE id=?", (project_id,))
