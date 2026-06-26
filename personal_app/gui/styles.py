@@ -89,7 +89,7 @@ QLabel#CompartmentTitle {
 }
 QLabel#CompartmentDescription {
     color: #8d9ba1;
-    font-size: 8.5pt;
+    font-size: 8pt;
 }
 QLabel#DragGrip {
     color: __ACCENT__;
@@ -105,7 +105,7 @@ QLineEdit, QTextEdit, QComboBox, QDateEdit, QSpinBox {
     color: #f8efe2;
     border: 1px solid #2d3d43;
     border-radius: 5px;
-    padding: 5px 7px;
+    padding: 3px 6px;
     selection-background-color: __ACCENT__;
     selection-color: #071010;
 }
@@ -114,7 +114,7 @@ QPushButton {
     color: #071010;
     border: none;
     border-radius: 6px;
-    padding: 6px 10px;
+    padding: 5px 8px;
     font-weight: 600;
 }
 QPushButton:hover { background: #89e3db; }
@@ -138,8 +138,11 @@ QHeaderView::section {
     background: #1c252a;
     color: #f8efe2;
     border: 1px solid #2d3d43;
-    padding: 5px;
+    padding: 3px;
     font-weight: 600;
+}
+QTableWidget::item {
+    padding: 2px;
 }
 QTableWidget::item:selected, QListWidget::item:selected {
     background: __ACCENT__;

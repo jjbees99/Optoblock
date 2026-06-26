@@ -22,6 +22,7 @@ class ShoppingPage(Compartment):
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.horizontalHeader().setStretchLastSection(True)
         self.table.verticalHeader().setVisible(False)
+        self.table.verticalHeader().setDefaultSectionSize(24)
 
         controls = QHBoxLayout()
         add = QPushButton("Add row")

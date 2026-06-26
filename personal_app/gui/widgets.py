@@ -22,20 +22,24 @@ class Compartment(QFrame):
         self._global_start = QPoint()
         self._start_pos = QPoint()
         self._start_size = self.size()
-        self._resizing = False
+        self._resize_edges: set[str] = set()
         self.setMinimumSize(280, 210)
         self.layout = QVBoxLayout(self)
-        self.layout.setContentsMargins(12, 10, 12, 12)
-        self.layout.setSpacing(8)
+        self.layout.setContentsMargins(8, 7, 8, 8)
+        self.layout.setSpacing(5)
         header = QHBoxLayout()
-        grip = QLabel("::")
+        header.setContentsMargins(0, 0, 0, 0)
+        grip = QLabel("move")
         grip.setObjectName("DragGrip")
         grip.setCursor(Qt.OpenHandCursor)
+        grip.setAttribute(Qt.WA_TransparentForMouseEvents)
         label = QLabel(title)
         label.setObjectName("CompartmentTitle")
-        resize_hint = QLabel("size")
+        label.setAttribute(Qt.WA_TransparentForMouseEvents)
+        resize_hint = QLabel("resize")
         resize_hint.setObjectName("ResizeGrip")
         resize_hint.setCursor(Qt.SizeFDiagCursor)
+        resize_hint.setAttribute(Qt.WA_TransparentForMouseEvents)
         header.addWidget(grip)
         header.addWidget(label)
         header.addStretch(1)
@@ -53,7 +57,7 @@ class Compartment(QFrame):
             self._global_start = event.globalPosition().toPoint()
             self._start_pos = self.pos()
             self._start_size = self.size()
-            self._resizing = self._is_resize_zone(self._drag_start)
+            self._resize_edges = self._resize_edges_at(self._drag_start)
             self.raise_()
             self.setProperty("dragging", True)
             self.style().unpolish(self)
@@ -64,13 +68,23 @@ class Compartment(QFrame):
         if event.buttons() & Qt.LeftButton:
             delta = event.globalPosition().toPoint() - self._global_start
             parent = self.parentWidget()
-            if self._resizing:
-                width = max(self.minimumWidth(), self._start_size.width() + delta.x())
-                height = max(self.minimumHeight(), self._start_size.height() + delta.y())
-                if parent:
-                    width = min(width, parent.width() - self.x())
-                    height = min(height, parent.height() - self.y())
-                self.resize(width, height)
+            if self._resize_edges:
+                x = self._start_pos.x()
+                y = self._start_pos.y()
+                width = self._start_size.width()
+                height = self._start_size.height()
+                if "right" in self._resize_edges:
+                    width = self._start_size.width() + delta.x()
+                if "bottom" in self._resize_edges:
+                    height = self._start_size.height() + delta.y()
+                if "left" in self._resize_edges:
+                    x = self._start_pos.x() + delta.x()
+                    width = self._start_size.width() - delta.x()
+                if "top" in self._resize_edges:
+                    y = self._start_pos.y() + delta.y()
+                    height = self._start_size.height() - delta.y()
+                x, y, width, height = self._clamp_resize(x, y, width, height)
+                self.setGeometry(x, y, width, height)
             else:
                 new_pos = self._start_pos + delta
                 if parent:
@@ -88,8 +102,43 @@ class Compartment(QFrame):
             self.geometry_changed.emit(self.module_name)
         super().mouseReleaseEvent(event)
 
-    def _is_resize_zone(self, point: QPoint) -> bool:
-        return point.x() >= self.width() - 22 and point.y() >= self.height() - 22
+    def _resize_edges_at(self, point: QPoint) -> set[str]:
+        margin = 12
+        edges = set()
+        if point.x() <= margin:
+            edges.add("left")
+        elif point.x() >= self.width() - margin:
+            edges.add("right")
+        if point.y() <= margin:
+            edges.add("top")
+        elif point.y() >= self.height() - margin:
+            edges.add("bottom")
+        return edges
+
+    def _clamp_resize(self, x: int, y: int, width: int, height: int) -> tuple[int, int, int, int]:
+        parent = self.parentWidget()
+        min_width = self.minimumWidth()
+        min_height = self.minimumHeight()
+        old_right = self._start_pos.x() + self._start_size.width()
+        old_bottom = self._start_pos.y() + self._start_size.height()
+        if width < min_width:
+            if "left" in self._resize_edges:
+                x = old_right - min_width
+            width = min_width
+        if height < min_height:
+            if "top" in self._resize_edges:
+                y = old_bottom - min_height
+            height = min_height
+        if parent:
+            if x < 0:
+                width += x
+                x = 0
+            if y < 0:
+                height += y
+                y = 0
+            width = min(width, parent.width() - x)
+            height = min(height, parent.height() - y)
+        return x, y, max(min_width, width), max(min_height, height)
 
     def set_outline_colour(self, colour: str) -> None:
         self.setStyleSheet(

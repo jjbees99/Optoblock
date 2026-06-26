@@ -20,6 +20,11 @@ class UnwindPage(Compartment):
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.horizontalHeader().setStretchLastSection(True)
         self.table.verticalHeader().setVisible(False)
+        self.table.verticalHeader().setDefaultSectionSize(24)
+
+        self.category_filter = QComboBox()
+        self.category_filter.addItems(["All categories", *CATEGORIES])
+        self.category_filter.currentTextChanged.connect(self.refresh)
 
         controls = QHBoxLayout()
         add = QPushButton("Add row")
@@ -40,6 +45,7 @@ class UnwindPage(Compartment):
 
         self.suggestion = QLabel()
         self.suggestion.setObjectName("CompartmentDescription")
+        self.layout.addWidget(self.category_filter)
         self.layout.addWidget(self.table, 1)
         self.layout.addLayout(controls)
         self.layout.addWidget(self.suggestion)
@@ -47,7 +53,10 @@ class UnwindPage(Compartment):
 
     def refresh(self) -> None:
         self.table.setRowCount(0)
+        active_filter = self.category_filter.currentText() if hasattr(self, "category_filter") else "All categories"
         for row in self.context.unwind.list():
+            if active_filter != "All categories" and row["activity_type"] != active_filter:
+                continue
             self.add_row([bool(row["done_today"]), row["name"], row["activity_type"], row["estimated_time"]])
 
     def add_row(self, values: list | None = None) -> None:
@@ -73,6 +82,7 @@ class UnwindPage(Compartment):
 
     def save(self) -> None:
         rows = []
+        active_filter = self.category_filter.currentText()
         for row in range(self.table.rowCount()):
             name = self._cell(row, 1)
             if not name:
@@ -85,6 +95,8 @@ class UnwindPage(Compartment):
                     "estimated_time": self._combo(row, 3) or "15 min",
                 }
             )
+        if active_filter != "All categories":
+            rows.extend(row for row in self.context.unwind.list() if row["activity_type"] != active_filter)
         self.context.unwind.replace_all(rows)
         self.refresh()
 
