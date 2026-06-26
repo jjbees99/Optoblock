@@ -27,6 +27,18 @@ from personal_app.gui.unwind_page import UnwindPage
 
 
 MODULES = ["Dashboard", "Tasks", "Projects", "Finance", "Shopping", "Recipes", "Unwind", "Brain Dump", "Archive", "Settings"]
+MODULE_OUTLINES = {
+    "Dashboard": "#7dd3fc",
+    "Tasks": "#f9a8d4",
+    "Projects": "#facc15",
+    "Finance": "#86efac",
+    "Shopping": "#fdba74",
+    "Recipes": "#c4b5fd",
+    "Unwind": "#93c5fd",
+    "Brain Dump": "#f0abfc",
+    "Archive": "#cbd5e1",
+    "Settings": "#67e8f9",
+}
 
 
 class MainWindow(QMainWindow):
@@ -104,10 +116,11 @@ class MainWindow(QMainWindow):
         geometries = self.load_geometries()
         for index, module in enumerate(self.active_modules):
             widget = self.module_factory(module)()
-            widget.dropped.connect(self.swap_module_at_drop)
             widget.geometry_changed.connect(self.save_widget_geometry)
+            widget.set_outline_colour(MODULE_OUTLINES.get(module, "#63d4c7"))
             widget.setParent(self.table)
             x, y, width, height = geometries.get(module, self.default_geometry(index))
+            x, y, width, height = self.clamp_geometry(x, y, width, height)
             widget.setGeometry(x, y, width, height)
             widget.show()
             self.widgets_by_module[module] = widget
@@ -135,11 +148,22 @@ class MainWindow(QMainWindow):
         self.save_layout()
 
     def default_geometry(self, index: int) -> tuple[int, int, int, int]:
-        width = 390
-        height = 300
-        gap = 16
+        width = 380
+        height = 292
+        gap = 14
         columns = max(1, min(3, max(1, self.table.width() // (width + gap))))
         return 18 + (index % columns) * (width + gap), 18 + (index // columns) * (height + gap), width, height
+
+    def clamp_geometry(self, x: int, y: int, width: int, height: int) -> tuple[int, int, int, int]:
+        min_width = 280
+        min_height = 210
+        table_width = max(self.table.width(), min_width + 24)
+        table_height = max(self.table.height(), min_height + 24)
+        width = max(min_width, min(width, table_width))
+        height = max(min_height, min(height, table_height))
+        x = max(0, min(x, table_width - width))
+        y = max(0, min(y, table_height - height))
+        return x, y, width, height
 
     def load_geometries(self) -> dict[str, tuple[int, int, int, int]]:
         raw = self.context.settings.get("workspace_geometries") or "{}"
@@ -154,8 +178,16 @@ class MainWindow(QMainWindow):
         if not widget:
             return
         data = {name: list(values) for name, values in self.load_geometries().items()}
-        data[module] = [widget.x(), widget.y(), widget.width(), widget.height()]
+        data[module] = list(self.clamp_geometry(widget.x(), widget.y(), widget.width(), widget.height()))
         self.context.settings.set("workspace_geometries", json.dumps(data))
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        for module, widget in self.widgets_by_module.items():
+            x, y, width, height = self.clamp_geometry(widget.x(), widget.y(), widget.width(), widget.height())
+            if (x, y, width, height) != (widget.x(), widget.y(), widget.width(), widget.height()):
+                widget.setGeometry(x, y, width, height)
+                self.save_widget_geometry(module)
 
     def apply_theme(self) -> None:
         theme = self.context.settings.get("theme") or "Dark"

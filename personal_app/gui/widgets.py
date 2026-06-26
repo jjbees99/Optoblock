@@ -19,6 +19,7 @@ class Compartment(QFrame):
         self.setObjectName("Compartment")
         self.module_name = module_name or title
         self._drag_start = QPoint()
+        self._global_start = QPoint()
         self._start_pos = QPoint()
         self._start_size = self.size()
         self._resizing = False
@@ -49,6 +50,7 @@ class Compartment(QFrame):
     def mousePressEvent(self, event) -> None:
         if event.button() == Qt.LeftButton:
             self._drag_start = event.position().toPoint()
+            self._global_start = event.globalPosition().toPoint()
             self._start_pos = self.pos()
             self._start_size = self.size()
             self._resizing = self._is_resize_zone(self._drag_start)
@@ -60,7 +62,7 @@ class Compartment(QFrame):
 
     def mouseMoveEvent(self, event) -> None:
         if event.buttons() & Qt.LeftButton:
-            delta = event.position().toPoint() - self._drag_start
+            delta = event.globalPosition().toPoint() - self._global_start
             parent = self.parentWidget()
             if self._resizing:
                 width = max(self.minimumWidth(), self._start_size.width() + delta.x())
@@ -75,7 +77,6 @@ class Compartment(QFrame):
                     new_pos.setX(max(0, min(new_pos.x(), parent.width() - self.width())))
                     new_pos.setY(max(0, min(new_pos.y(), parent.height() - self.height())))
                 self.move(new_pos)
-            self.geometry_changed.emit(self.module_name)
         super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event) -> None:
@@ -89,6 +90,20 @@ class Compartment(QFrame):
 
     def _is_resize_zone(self, point: QPoint) -> bool:
         return point.x() >= self.width() - 22 and point.y() >= self.height() - 22
+
+    def set_outline_colour(self, colour: str) -> None:
+        self.setStyleSheet(
+            f"""
+            QFrame#Compartment {{
+                background: #171d22;
+                border: 1px solid {colour};
+                border-radius: 9px;
+            }}
+            QFrame#Compartment[dragging="true"] {{
+                border: 2px solid {colour};
+            }}
+            """
+        )
 
 
 class QuickAddBar(QWidget):

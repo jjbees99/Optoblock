@@ -64,48 +64,48 @@ QListWidget, QTableWidget {
 
 DARK = """
 QMainWindow, QWidget#Root {
-    background: #0d1013;
+    background: #0b0e11;
     color: #f8efe2;
     font-family: "Segoe UI Variable", "Aptos", "Segoe UI";
-    font-size: 10pt;
+    font-size: 9.5pt;
 }
 QFrame#Table {
     background: __TABLE__;
-    border: 1px solid #3b5057;
-    border-radius: 22px;
+    border: 1px solid #24343a;
+    border-radius: 16px;
 }
 QFrame#Compartment {
     background: #171d22;
     border: 1px solid #34484f;
-    border-radius: 10px;
+    border-radius: 9px;
 }
 QFrame#Compartment[dragging="true"] {
     border: 2px solid __ACCENT__;
 }
 QLabel#CompartmentTitle {
-    font-size: 12.5pt;
+    font-size: 11.5pt;
     font-weight: 650;
     color: #f8efe2;
 }
 QLabel#CompartmentDescription {
-    color: #a9b7bd;
-    font-size: 9pt;
+    color: #8d9ba1;
+    font-size: 8.5pt;
 }
 QLabel#DragGrip {
     color: __ACCENT__;
     font-weight: 800;
 }
 QLabel#ResizeGrip {
-    color: #6f858d;
-    font-size: 8pt;
-    font-weight: 700;
+    color: #5c6d74;
+    font-size: 7.5pt;
+    font-weight: 600;
 }
 QLineEdit, QTextEdit, QComboBox, QDateEdit, QSpinBox {
     background: #0f1418;
     color: #f8efe2;
     border: 1px solid #2d3d43;
-    border-radius: 6px;
-    padding: 6px 8px;
+    border-radius: 5px;
+    padding: 5px 7px;
     selection-background-color: __ACCENT__;
     selection-color: #071010;
 }
@@ -113,15 +113,15 @@ QPushButton {
     background: __ACCENT__;
     color: #071010;
     border: none;
-    border-radius: 8px;
-    padding: 7px 12px;
-    font-weight: 650;
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-weight: 600;
 }
 QPushButton:hover { background: #89e3db; }
 QPushButton#Subtle {
-    background: #222c31;
+    background: #1d2529;
     color: #f8efe2;
-    border: 1px solid #33484f;
+    border: 1px solid #2b3b42;
 }
 QPushButton#Danger {
     background: #a24b45;
@@ -130,7 +130,7 @@ QListWidget, QTableWidget {
     background: #0f1418;
     color: #f8efe2;
     border: 1px solid #2d3d43;
-    border-radius: 6px;
+    border-radius: 5px;
     gridline-color: #26343a;
     alternate-background-color: #12191d;
 }
@@ -138,8 +138,8 @@ QHeaderView::section {
     background: #1c252a;
     color: #f8efe2;
     border: 1px solid #2d3d43;
-    padding: 6px;
-    font-weight: 650;
+    padding: 5px;
+    font-weight: 600;
 }
 QTableWidget::item:selected, QListWidget::item:selected {
     background: __ACCENT__;
@@ -148,10 +148,10 @@ QTableWidget::item:selected, QListWidget::item:selected {
 QToolButton {
     background: #171d22;
     color: #f8efe2;
-    border: 1px solid #2f4147;
-    border-radius: 10px;
-    padding: 8px 14px;
-    font-weight: 650;
+    border: 1px solid #2b3b42;
+    border-radius: 8px;
+    padding: 7px 12px;
+    font-weight: 600;
 }
 QToolButton:hover {
     border-color: __ACCENT__;
