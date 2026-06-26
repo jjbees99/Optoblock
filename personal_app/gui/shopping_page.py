@@ -1,7 +1,8 @@
 from urllib.parse import quote
+from pathlib import Path
 
 from PySide6.QtCore import Qt, QUrl
-from PySide6.QtGui import QDesktopServices
+from PySide6.QtGui import QDesktopServices, QGuiApplication
 from PySide6.QtWidgets import QAbstractItemView, QComboBox, QHBoxLayout, QLabel, QPushButton, QTableWidget, QTableWidgetItem
 
 from personal_app.app import AppContext
@@ -129,11 +130,20 @@ class ShoppingPage(Compartment):
     def email_list(self) -> None:
         self.save()
         recipient = "jakebees00@gmail.com"
-        subject = quote("Optoblock shopping list")
-        body = quote(self.context.shopping.email_body())
-        url = QUrl(f"mailto:{recipient}?subject={subject}&body={body}")
+        subject_text = "Optoblock shopping list"
+        body_text = self.context.shopping.email_body()
+        QGuiApplication.clipboard().setText(body_text)
+        backup_path = Path.home() / "Documents" / "optoblock-shopping-list.txt"
+        backup_path.parent.mkdir(parents=True, exist_ok=True)
+        backup_path.write_text(body_text, encoding="utf-8")
+        subject = quote(subject_text)
+        body = quote(body_text)
+        url = QUrl(f"https://mail.google.com/mail/?view=cm&fs=1&to={recipient}&su={subject}&body={body}")
         opened = QDesktopServices.openUrl(url)
-        self.notice.setText("Opened your email app with the shopping list ready to send." if opened else "Could not open the default email app.")
+        if opened:
+            self.notice.setText("Opened Gmail in your browser. The list is also copied to clipboard and saved in Documents.")
+        else:
+            self.notice.setText(f"Could not open Gmail, but the list is copied and saved to {backup_path}.")
 
     def _cell(self, row: int, col: int) -> str:
         item = self.table.item(row, col)
