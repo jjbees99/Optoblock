@@ -16,6 +16,7 @@ env/
 # Build outputs
 build/
 dist/
+dist_*/
 
 # OS files
 .DS_Store
