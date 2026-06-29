@@ -1,16 +1,18 @@
 from datetime import datetime
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import QAbstractItemView, QComboBox, QHBoxLayout, QPushButton, QTableWidget, QTableWidgetItem
 
 from personal_app.app import AppContext
-from personal_app.gui.widgets import Compartment, danger_button, subtle_button
+from personal_app.gui.widgets import Compartment, subtle_button
 
 
 TASK_COLUMNS = ["Done", "Name", "Description", "Category", "Due Date", "Priority", "Status"]
 
 
 class TasksPage(Compartment):
+    archive_changed = Signal()
+
     def __init__(self, context: AppContext) -> None:
         super().__init__("To-Do List", "Spreadsheet-style task planning: edit cells, choose priority/status, then save.", "Tasks")
         self.context = context
@@ -21,15 +23,15 @@ class TasksPage(Compartment):
         self.table.horizontalHeader().setStretchLastSection(True)
         self.table.verticalHeader().setVisible(False)
         controls = QHBoxLayout()
-        add = QPushButton("Add row")
-        save = subtle_button("Save sheet")
+        add = QPushButton("Add")
+        save = subtle_button("Save")
         archive_done = subtle_button("Archive done")
-        delete = danger_button("Delete row")
+        remove = subtle_button("Remove")
         add.clicked.connect(self.add_row)
         save.clicked.connect(self.save)
         archive_done.clicked.connect(self.archive_completed)
-        delete.clicked.connect(self.delete_row)
-        for button in (add, save, archive_done, delete):
+        remove.clicked.connect(self.delete_row)
+        for button in (add, save, archive_done, remove):
             controls.addWidget(button)
         controls.addStretch(1)
         self.layout.addWidget(self.table, 1)
@@ -39,6 +41,8 @@ class TasksPage(Compartment):
     def refresh(self) -> None:
         self.table.setRowCount(0)
         for row in self.context.tasks.list("All"):
+            if row["status"] == "Archived":
+                continue
             self.add_row(
                 [
                     row["status"] == "Completed",
@@ -95,6 +99,7 @@ class TasksPage(Compartment):
                     "completed_at": datetime.now().isoformat(timespec="seconds") if status == "Completed" else "",
                 }
             )
+        rows.extend(self.context.tasks.list("Archived"))
         self.context.tasks.replace_all(rows)
         self.refresh()
 
@@ -102,6 +107,7 @@ class TasksPage(Compartment):
         self.save()
         self.context.tasks.archive_completed()
         self.refresh()
+        self.archive_changed.emit()
 
     def delete_row(self) -> None:
         row = self.table.currentRow()

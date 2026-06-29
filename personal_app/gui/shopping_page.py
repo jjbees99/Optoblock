@@ -6,7 +6,7 @@ from PySide6.QtGui import QDesktopServices, QGuiApplication
 from PySide6.QtWidgets import QAbstractItemView, QComboBox, QHBoxLayout, QLabel, QPushButton, QTableWidget, QTableWidgetItem
 
 from personal_app.app import AppContext
-from personal_app.gui.widgets import Compartment, danger_button, subtle_button
+from personal_app.gui.widgets import Compartment, subtle_button
 
 
 SHOPPING_COLUMNS = ["Bought", "Item", "Quantity", "Category", "List"]
@@ -25,23 +25,17 @@ class ShoppingPage(Compartment):
         self.table.verticalHeader().setDefaultSectionSize(24)
 
         controls = QHBoxLayout()
-        add = QPushButton("Add row")
-        save = subtle_button("Save sheet")
-        toggle = subtle_button("Bought")
-        move = subtle_button("Move list")
+        add = QPushButton("Add")
+        save = subtle_button("Save")
+        move = subtle_button("Move")
         archive = subtle_button("Archive bought")
-        clear = subtle_button("Clear bought")
-        email = subtle_button("Email list")
-        delete = danger_button("Delete row")
+        email = subtle_button("Email")
         add.clicked.connect(self.add_row)
         save.clicked.connect(self.save)
-        toggle.clicked.connect(self.toggle)
         move.clicked.connect(self.move)
         archive.clicked.connect(self.archive)
-        clear.clicked.connect(self.clear)
         email.clicked.connect(self.email_list)
-        delete.clicked.connect(self.delete_row)
-        for button in (add, save, toggle, move, archive, clear, email, delete):
+        for button in (add, save, move, archive, email):
             controls.addWidget(button)
         controls.addStretch(1)
 

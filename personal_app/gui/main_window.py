@@ -1,12 +1,13 @@
-from collections.abc import Callable
-import json
-
+from PySide6.QtCore import QRect, QTimer
 from PySide6.QtWidgets import (
     QCheckBox,
+    QComboBox,
     QFrame,
     QHBoxLayout,
+    QLabel,
     QMainWindow,
     QMenu,
+    QMessageBox,
     QToolButton,
     QVBoxLayout,
     QWidget,
@@ -14,68 +15,98 @@ from PySide6.QtWidgets import (
 )
 
 from personal_app.app import AppContext
-from personal_app.gui.archive_page import ArchivePage
-from personal_app.gui.dashboard_page import BrainDumpPage, DashboardPage
-from personal_app.gui.finance_page import FinancePage
-from personal_app.gui.projects_page import ProjectsPage
-from personal_app.gui.recipes_page import RecipesPage
-from personal_app.gui.settings_page import SettingsPage
-from personal_app.gui.shopping_page import ShoppingPage
+from personal_app.data.models import DashboardModule
+from personal_app.gui.module_registry import MODULE_OUTLINES, MODULE_TITLES, module_factory
 from personal_app.gui.styles import DARK, LIGHT
-from personal_app.gui.tasks_page import TasksPage
-from personal_app.gui.unwind_page import UnwindPage
+from personal_app.logic.dashboard_layout import GRID_COLUMNS, GRID_ROWS, DashboardLayout
+from personal_app.logic.dashboard_storage import DashboardStorage
 
 
-MODULES = ["Dashboard", "Tasks", "Projects", "Finance", "Shopping", "Recipes", "Unwind", "Brain Dump", "Archive", "Settings"]
-MODULE_OUTLINES = {
-    "Dashboard": "#7dd3fc",
-    "Tasks": "#f9a8d4",
-    "Projects": "#facc15",
-    "Finance": "#86efac",
-    "Shopping": "#fdba74",
-    "Recipes": "#c4b5fd",
-    "Unwind": "#93c5fd",
-    "Brain Dump": "#f0abfc",
-    "Archive": "#cbd5e1",
-    "Settings": "#67e8f9",
-}
+MODULES = list(MODULE_TITLES)
+FOCUS_LAYOUT = [
+    ("Tasks", 0, 0, 1, 1),
+    ("Shopping", 1, 0, 1, 1),
+    ("Voice Brain Dump", 2, 0, 1, 2),
+    ("Archive", 0, 1, 1, 1),
+    ("Projects", 1, 1, 1, 1),
+    ("Unwind", 0, 2, 1, 1),
+    ("Focus Timer", 1, 2, 1, 1),
+]
+UNWINDING_LAYOUT = [
+    ("Unwind", 0, 0, 2, 2),
+    ("Recipes", 2, 0, 1, 2),
+    ("Shopping", 0, 2, 1, 1),
+    ("Brain Dump Scanner", 1, 2, 1, 1),
+    ("Archive", 2, 2, 1, 1),
+]
+PROFILE_LAYOUTS = {"Focus Work": FOCUS_LAYOUT, "Unwinding": UNWINDING_LAYOUT}
+GRID_MARGIN = 14
+GRID_GAP = 10
 
 
 class MainWindow(QMainWindow):
     def __init__(self, context: AppContext) -> None:
         super().__init__()
         self.context = context
+        self.storage = DashboardStorage()
+        self.active_profile, self.profiles = self.storage.load_profiles()
+        for profile_name in PROFILE_LAYOUTS:
+            candidate = DashboardLayout(self.profiles.get(profile_name, []))
+            if not candidate.modules or not candidate.is_valid():
+                self.profiles[profile_name] = self._default_modules(profile_name)
+        if self.active_profile not in self.profiles:
+            self.active_profile = "Focus Work"
+        self.dashboard = DashboardLayout(self.profiles[self.active_profile])
+        self._persist_profiles()
+
         self.setWindowTitle("Optoblock")
         self.resize(1320, 860)
         self.module_checks: dict[str, QCheckBox] = {}
-        self.active_modules = context.settings.startup_modules() or ["Dashboard", "Tasks", "Projects", "Finance"]
+        self.widgets_by_module: dict[str, QWidget] = {}
+        self.slot_frames: list[QFrame] = []
+
         self.root = QWidget()
         self.root.setObjectName("Root")
         self.setCentralWidget(self.root)
         self.outer = QVBoxLayout(self.root)
         self.outer.setContentsMargins(18, 14, 18, 18)
-        self.outer.setSpacing(12)
+        self.outer.setSpacing(10)
         self._build_top_bar()
+
         self.table = QFrame()
         self.table.setObjectName("Table")
         self.table.setMinimumHeight(680)
         self.outer.addWidget(self.table, 1)
-        self.widgets_by_module: dict[str, QWidget] = {}
+        self._build_slots()
+
         self.apply_theme()
         self.rebuild_table()
 
     def _build_top_bar(self) -> None:
         top = QHBoxLayout()
-        top.addStretch(1)
+        app_name = QLabel("Optoblock")
+        app_name.setObjectName("AppName")
+        top.addWidget(app_name)
+        self.notice = QLabel("Drag modules or their edges. Changes save to the selected loadout.")
+        self.notice.setObjectName("WorkspaceNotice")
+        top.addWidget(self.notice, 1)
+
+        self.profile_picker = QComboBox()
+        self.profile_picker.setObjectName("ProfilePicker")
+        self.profile_picker.addItems(PROFILE_LAYOUTS)
+        self.profile_picker.setCurrentText(self.active_profile)
+        self.profile_picker.currentTextChanged.connect(self.switch_profile)
+        top.addWidget(self.profile_picker)
 
         picker = QToolButton()
-        picker.setText("Workspace")
+        picker.setText("Modules")
         picker.setPopupMode(QToolButton.InstantPopup)
         menu = QMenu(picker)
+        active = {module.id for module in self.dashboard.modules}
         for module in MODULES:
-            check = QCheckBox(module)
-            check.setChecked(module in self.active_modules)
-            check.stateChanged.connect(self._module_changed)
+            check = QCheckBox(MODULE_TITLES[module])
+            check.setChecked(module in active)
+            check.stateChanged.connect(lambda _state, name=module: self._module_changed(name))
             action = QWidgetAction(menu)
             action.setDefaultWidget(check)
             menu.addAction(action)
@@ -84,110 +115,189 @@ class MainWindow(QMainWindow):
         top.addWidget(picker)
         self.outer.addLayout(top)
 
-    def _module_changed(self) -> None:
-        self.active_modules = [name for name, check in self.module_checks.items() if check.isChecked()]
-        if not self.active_modules:
-            self.active_modules = ["Dashboard"]
-            self.module_checks["Dashboard"].setChecked(True)
-        self.save_layout()
-        self.rebuild_table()
+    def _build_slots(self) -> None:
+        for _ in range(GRID_COLUMNS * GRID_ROWS):
+            slot = QFrame(self.table)
+            slot.setObjectName("GridSlot")
+            slot.lower()
+            slot.show()
+            self.slot_frames.append(slot)
 
-    def save_layout(self) -> None:
-        self.context.settings.set_startup_modules(self.active_modules)
-
-    def module_factory(self, name: str) -> Callable[[], QWidget]:
-        return {
-            "Dashboard": lambda: DashboardPage(self.context),
-            "Tasks": lambda: TasksPage(self.context),
-            "Projects": lambda: ProjectsPage(self.context),
-            "Finance": lambda: FinancePage(self.context),
-            "Shopping": lambda: ShoppingPage(self.context),
-            "Recipes": lambda: RecipesPage(self.context),
-            "Unwind": lambda: UnwindPage(self.context),
-            "Brain Dump": lambda: BrainDumpPage(self.context),
-            "Archive": lambda: ArchivePage(self.context),
-            "Settings": lambda: SettingsPage(self.context, self.apply_theme),
-        }[name]
+    def _module_changed(self, name: str) -> None:
+        check = self.module_checks[name]
+        if check.isChecked():
+            location = self.dashboard.first_available(module_id=name)
+            if location is None:
+                check.blockSignals(True)
+                check.setChecked(False)
+                check.blockSignals(False)
+                self._show_error("All 9 dashboard slots are occupied. Move, resize, or remove a module first.")
+                return
+            x, y = location
+            self.dashboard.add(
+                DashboardModule(
+                    id=name,
+                    title=MODULE_TITLES[name],
+                    type=name,
+                    x=x,
+                    y=y,
+                )
+            )
+        else:
+            self.dashboard.remove(name)
+        self._save_and_rebuild()
 
     def rebuild_table(self) -> None:
         for widget in list(self.widgets_by_module.values()):
             widget.deleteLater()
         self.widgets_by_module.clear()
-        geometries = self.load_geometries()
-        for index, module in enumerate(self.active_modules):
-            widget = self.module_factory(module)()
-            widget.geometry_changed.connect(self.save_widget_geometry)
-            widget.set_outline_colour(MODULE_OUTLINES.get(module, "#63d4c7"))
+
+        for module in self.dashboard.modules:
+            widget = module_factory(self.context, module.type, self.apply_theme)()
+            widget.module_name = module.id
+            widget.set_grid_mode(True)
+            widget.set_outline_colour(MODULE_OUTLINES.get(module.type, "#63d4c7"))
+            widget.dropped.connect(self.move_module_at_drop)
+            widget.geometry_changed.connect(self.resize_module_from_edges)
+            if hasattr(widget, "items_added"):
+                widget.items_added.connect(self.refresh_destination_modules)
+            if hasattr(widget, "archive_changed"):
+                widget.archive_changed.connect(lambda: self.refresh_module("Archive"))
             widget.setParent(self.table)
-            x, y, width, height = geometries.get(module, self.default_geometry(index))
-            x, y, width, height = self.clamp_geometry(x, y, width, height)
-            widget.setGeometry(x, y, width, height)
             widget.show()
-            self.widgets_by_module[module] = widget
+            self.widgets_by_module[module.id] = widget
+        QTimer.singleShot(0, self.position_grid_items)
 
-    def column_count(self) -> int:
-        count = len(self.active_modules)
-        if count <= 2:
-            return count or 1
-        if count <= 6:
-            return 3
-        return 4
+    def refresh_destination_modules(self, counts: dict[str, int]) -> None:
+        destinations = {
+            "To-Do": "Tasks",
+            "Reminder Candidate": "Tasks",
+            "Shopping": "Shopping",
+            "Projects / Learning": "Projects",
+            "Archive / Notes": "Archive",
+        }
+        for category, module_name in destinations.items():
+            if not counts.get(category):
+                continue
+            self.refresh_module(module_name)
 
-    def swap_module_at_drop(self, source: str, global_pos) -> None:
-        target = self.childAt(self.mapFromGlobal(global_pos))
-        while target and not hasattr(target, "module_name"):
-            target = target.parentWidget()
-        if not target or target.module_name == source:
+    def refresh_module(self, module_name: str) -> None:
+        widget = self.widgets_by_module.get(module_name)
+        refresh = getattr(widget, "refresh", None)
+        if callable(refresh):
+            refresh()
+
+    def move_module_at_drop(self, module_id: str, global_pos) -> None:
+        module = self.dashboard.module(module_id)
+        if not module:
             return
-        try:
-            source_index = self.active_modules.index(source)
-            target_index = self.active_modules.index(target.module_name)
-        except ValueError:
+        local = self.table.mapFromGlobal(global_pos)
+        cell_width, cell_height = self._cell_size()
+        x = round((local.x() - GRID_MARGIN - cell_width / 2) / (cell_width + GRID_GAP))
+        y = round((local.y() - GRID_MARGIN - cell_height / 2) / (cell_height + GRID_GAP))
+        if not self.dashboard.place(module_id, x, y, module.width, module.height):
+            self.position_grid_items()
+            self._show_error("That position does not have enough free slots for this module.")
             return
-        self.active_modules[source_index], self.active_modules[target_index] = self.active_modules[target_index], self.active_modules[source_index]
-        self.save_layout()
+        self._persist_profiles()
+        self.position_grid_items()
+        self._set_notice(f"{module.title} moved to row {y + 1}, column {x + 1}.")
 
-    def default_geometry(self, index: int) -> tuple[int, int, int, int]:
-        width = 380
-        height = 292
-        gap = 14
-        columns = max(1, min(3, max(1, self.table.width() // (width + gap))))
-        return 18 + (index % columns) * (width + gap), 18 + (index // columns) * (height + gap), width, height
-
-    def clamp_geometry(self, x: int, y: int, width: int, height: int) -> tuple[int, int, int, int]:
-        min_width = 280
-        min_height = 210
-        table_width = max(self.table.width(), min_width + 24)
-        table_height = max(self.table.height(), min_height + 24)
-        width = max(min_width, min(width, table_width))
-        height = max(min_height, min(height, table_height))
-        x = max(0, min(x, table_width - width))
-        y = max(0, min(y, table_height - height))
-        return x, y, width, height
-
-    def load_geometries(self) -> dict[str, tuple[int, int, int, int]]:
-        raw = self.context.settings.get("workspace_geometries") or "{}"
-        try:
-            data = json.loads(raw)
-        except json.JSONDecodeError:
-            return {}
-        return {name: tuple(values) for name, values in data.items() if isinstance(values, list) and len(values) == 4}
-
-    def save_widget_geometry(self, module: str) -> None:
-        widget = self.widgets_by_module.get(module)
-        if not widget:
+    def resize_module_from_edges(self, module_id: str) -> None:
+        module = self.dashboard.module(module_id)
+        widget = self.widgets_by_module.get(module_id)
+        if not module or not widget:
             return
-        data = {name: list(values) for name, values in self.load_geometries().items()}
-        data[module] = list(self.clamp_geometry(widget.x(), widget.y(), widget.width(), widget.height()))
-        self.context.settings.set("workspace_geometries", json.dumps(data))
+        cell_width, cell_height = self._cell_size()
+        x = round((widget.x() - GRID_MARGIN) / (cell_width + GRID_GAP))
+        y = round((widget.y() - GRID_MARGIN) / (cell_height + GRID_GAP))
+        width = max(1, min(2, round((widget.width() + GRID_GAP) / (cell_width + GRID_GAP))))
+        height = max(1, min(2, round((widget.height() + GRID_GAP) / (cell_height + GRID_GAP))))
+        if not self.dashboard.place(module_id, x, y, width, height):
+            self.position_grid_items()
+            self._show_error(f"{module.title} cannot fill those slots because they are occupied.")
+            return
+        self._persist_profiles()
+        self.position_grid_items()
+        self._set_notice(f"{module.title} resized to {width} x {height}.")
+
+    def switch_profile(self, profile_name: str) -> None:
+        if profile_name == self.active_profile or profile_name not in self.profiles:
+            return
+        self._persist_profiles()
+        self.active_profile = profile_name
+        self.dashboard = DashboardLayout(self.profiles[profile_name])
+        self._sync_module_checks()
+        self._persist_profiles()
+        self.rebuild_table()
+        self._set_notice(f"Loaded {profile_name} loadout.")
+
+    def position_grid_items(self) -> None:
+        for index, slot in enumerate(self.slot_frames):
+            slot.setGeometry(self._grid_geometry(index % GRID_COLUMNS, index // GRID_COLUMNS, 1, 1))
+            slot.lower()
+        for module in self.dashboard.modules:
+            widget = self.widgets_by_module.get(module.id)
+            if widget:
+                widget.setGeometry(self._grid_geometry(module.x, module.y, module.width, module.height))
+                widget.raise_()
+
+    def _grid_geometry(self, x: int, y: int, width: int, height: int) -> QRect:
+        cell_width, cell_height = self._cell_size()
+        left = GRID_MARGIN + x * (cell_width + GRID_GAP)
+        top = GRID_MARGIN + y * (cell_height + GRID_GAP)
+        pixel_width = width * cell_width + (width - 1) * GRID_GAP
+        pixel_height = height * cell_height + (height - 1) * GRID_GAP
+        return QRect(left, top, pixel_width, pixel_height)
+
+    def _cell_size(self) -> tuple[int, int]:
+        width = max(1, (self.table.width() - 2 * GRID_MARGIN - (GRID_COLUMNS - 1) * GRID_GAP) // GRID_COLUMNS)
+        height = max(1, (self.table.height() - 2 * GRID_MARGIN - (GRID_ROWS - 1) * GRID_GAP) // GRID_ROWS)
+        return width, height
+
+    def _save_and_rebuild(self) -> None:
+        self._persist_profiles()
+        self.rebuild_table()
+
+    def _persist_profiles(self) -> None:
+        self.profiles[self.active_profile] = self.dashboard.modules
+        self.storage.save_profiles(self.active_profile, self.profiles)
+
+    def _sync_module_checks(self) -> None:
+        active = {module.id for module in self.dashboard.modules}
+        for name, check in self.module_checks.items():
+            check.blockSignals(True)
+            check.setChecked(name in active)
+            check.blockSignals(False)
+
+    def _show_error(self, message: str) -> None:
+        self._set_notice(message)
+        QMessageBox.information(self, "Dashboard layout", message)
+
+    def _set_notice(self, message: str) -> None:
+        self.notice.setText(message)
+
+    def _default_modules(self, profile_name: str = "Focus Work") -> list[DashboardModule]:
+        return [
+            DashboardModule(
+                id=name,
+                title=MODULE_TITLES[name],
+                type=name,
+                x=x,
+                y=y,
+                width=width,
+                height=height,
+            )
+            for name, x, y, width, height in PROFILE_LAYOUTS[profile_name]
+        ]
 
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
-        for module, widget in self.widgets_by_module.items():
-            x, y, width, height = self.clamp_geometry(widget.x(), widget.y(), widget.width(), widget.height())
-            if (x, y, width, height) != (widget.x(), widget.y(), widget.width(), widget.height()):
-                widget.setGeometry(x, y, width, height)
-                self.save_widget_geometry(module)
+        self.position_grid_items()
+
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        self.position_grid_items()
 
     def apply_theme(self) -> None:
         theme = self.context.settings.get("theme") or "Dark"

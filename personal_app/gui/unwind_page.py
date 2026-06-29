@@ -2,7 +2,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QAbstractItemView, QComboBox, QHBoxLayout, QLabel, QPushButton, QTableWidget, QTableWidgetItem
 
 from personal_app.app import AppContext
-from personal_app.gui.widgets import Compartment, danger_button, subtle_button
+from personal_app.gui.widgets import Compartment, subtle_button
 
 
 UNWIND_COLUMNS = ["Done", "Activity", "Category", "Time"]
@@ -27,19 +27,17 @@ class UnwindPage(Compartment):
         self.category_filter.currentTextChanged.connect(self.refresh)
 
         controls = QHBoxLayout()
-        add = QPushButton("Add row")
-        save = subtle_button("Save sheet")
+        add = QPushButton("Add")
+        save = subtle_button("Save")
         done = subtle_button("Done today")
-        suggest = subtle_button("Suggest something")
-        reset = subtle_button("Daily reset")
-        delete = danger_button("Delete row")
+        suggest = subtle_button("Suggest")
+        reset = subtle_button("Reset")
         add.clicked.connect(self.add_row)
         save.clicked.connect(self.save)
         done.clicked.connect(self.toggle)
         suggest.clicked.connect(self.suggest)
         reset.clicked.connect(self.reset)
-        delete.clicked.connect(self.delete_row)
-        for button in (add, save, done, suggest, reset, delete):
+        for button in (add, save, done, suggest, reset):
             controls.addWidget(button)
         controls.addStretch(1)
 

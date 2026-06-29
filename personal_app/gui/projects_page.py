@@ -2,7 +2,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QAbstractItemView, QComboBox, QHBoxLayout, QPushButton, QTableWidget, QTableWidgetItem
 
 from personal_app.app import AppContext
-from personal_app.gui.widgets import Compartment, danger_button, subtle_button
+from personal_app.gui.widgets import Compartment, subtle_button
 
 
 PROJECT_COLUMNS = ["Colour", "Title", "Description", "Category", "Status", "Next Action", "Action Done"]
@@ -27,17 +27,15 @@ class ProjectsPage(Compartment):
         self.table.verticalHeader().setVisible(False)
 
         controls = QHBoxLayout()
-        add = QPushButton("Add row")
-        save = subtle_button("Save sheet")
-        convert = subtle_button("Next action to task")
-        archive = subtle_button("Archive row")
-        delete = danger_button("Delete row")
+        add = QPushButton("Add")
+        save = subtle_button("Save")
+        convert = subtle_button("To task")
+        archive = subtle_button("Archive")
         add.clicked.connect(self.add_row)
         save.clicked.connect(self.save)
         convert.clicked.connect(self.convert)
         archive.clicked.connect(self.archive_row)
-        delete.clicked.connect(self.delete_row)
-        for button in (add, save, convert, archive, delete):
+        for button in (add, save, convert, archive):
             controls.addWidget(button)
         controls.addStretch(1)
 

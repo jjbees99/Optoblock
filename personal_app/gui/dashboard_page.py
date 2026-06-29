@@ -47,7 +47,7 @@ class DashboardPage(Compartment):
 
 class BrainDumpPage(Compartment):
     def __init__(self, context: AppContext) -> None:
-        super().__init__("Brain Dump", "Drop messy thoughts here, then turn the useful ones into plans later.", "Brain Dump")
+        super().__init__("Brain Dump Scanner", "Capture and OCR workflow coming next. Typed brain dumps remain available.", "Brain Dump Scanner")
         self.context = context
         self.text = QTextEdit()
         self.text.setPlaceholderText("Messy thoughts, loose ideas, reminders...")

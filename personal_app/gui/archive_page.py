@@ -20,11 +20,19 @@ class ArchivePage(Compartment):
         self.list_widget.clear()
         for row in self.context.tasks.list("Archived"):
             item = QListWidgetItem(f"Task: {row['name']} | {row['priority']} | {row['category']}")
-            item.setData(256, row)
+            item.setData(256, ("task", row))
+            self.list_widget.addItem(item)
+        for row in self.context.brain_dump.archived():
+            item = QListWidgetItem(f"Note: {row['body']}")
+            item.setData(256, ("note", row))
             self.list_widget.addItem(item)
 
     def restore(self) -> None:
         item = self.list_widget.currentItem()
         if item:
-            self.context.tasks.restore(item.data(256)["id"])
+            kind, row = item.data(256)
+            if kind == "note":
+                self.context.brain_dump.restore(row["id"])
+            else:
+                self.context.tasks.restore(row["id"])
             self.refresh()

@@ -17,6 +17,7 @@ env/
 build/
 dist/
 dist_*/
+Optoblock-Windows.zip
 
 # OS files
 .DS_Store

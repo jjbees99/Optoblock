@@ -23,16 +23,13 @@ class Compartment(QFrame):
         self._start_pos = QPoint()
         self._start_size = self.size()
         self._resize_edges: set[str] = set()
+        self._grid_mode = False
         self.setMinimumSize(280, 210)
         self.layout = QVBoxLayout(self)
         self.layout.setContentsMargins(8, 7, 8, 8)
         self.layout.setSpacing(5)
         header = QHBoxLayout()
         header.setContentsMargins(0, 0, 0, 0)
-        grip = QLabel("move")
-        grip.setObjectName("DragGrip")
-        grip.setCursor(Qt.OpenHandCursor)
-        grip.setAttribute(Qt.WA_TransparentForMouseEvents)
         label = QLabel(title)
         label.setObjectName("CompartmentTitle")
         label.setAttribute(Qt.WA_TransparentForMouseEvents)
@@ -40,10 +37,10 @@ class Compartment(QFrame):
         resize_hint.setObjectName("ResizeGrip")
         resize_hint.setCursor(Qt.SizeFDiagCursor)
         resize_hint.setAttribute(Qt.WA_TransparentForMouseEvents)
-        header.addWidget(grip)
         header.addWidget(label)
         header.addStretch(1)
         header.addWidget(resize_hint)
+        self.resize_hint = resize_hint
         self.layout.addLayout(header)
         if description:
             desc = QLabel(description)
@@ -98,8 +95,10 @@ class Compartment(QFrame):
         self.style().unpolish(self)
         self.style().polish(self)
         if event.button() == Qt.LeftButton:
-            self.dropped.emit(self.module_name, event.globalPosition().toPoint())
-            self.geometry_changed.emit(self.module_name)
+            if self._resize_edges:
+                self.geometry_changed.emit(self.module_name)
+            else:
+                self.dropped.emit(self.module_name, event.globalPosition().toPoint())
         super().mouseReleaseEvent(event)
 
     def _resize_edges_at(self, point: QPoint) -> set[str]:
@@ -153,6 +152,12 @@ class Compartment(QFrame):
             }}
             """
         )
+
+    def set_grid_mode(self, enabled: bool = True) -> None:
+        self._grid_mode = enabled
+        self.resize_hint.setVisible(enabled)
+        if enabled:
+            self.setMinimumSize(80, 80)
 
 
 class QuickAddBar(QWidget):

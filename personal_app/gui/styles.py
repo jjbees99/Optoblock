@@ -10,6 +10,11 @@ QFrame#Table {
     border: 1px solid #33454a;
     border-radius: 18px;
 }
+QFrame#GridSlot {
+    background: rgba(255, 255, 255, 0.025);
+    border: 1px dashed #496069;
+    border-radius: 8px;
+}
 QFrame#Compartment {
     background: #181d21;
     border: 1px solid #33454a;
@@ -26,10 +31,6 @@ QLabel#CompartmentTitle {
 QLabel#CompartmentDescription {
     color: #aebbc0;
     font-size: 9.5pt;
-}
-QLabel#DragGrip {
-    color: __ACCENT__;
-    font-weight: 800;
 }
 QLineEdit, QTextEdit, QComboBox, QDateEdit, QSpinBox {
     background: #101417;
@@ -91,14 +92,24 @@ QLabel#CompartmentDescription {
     color: #8d9ba1;
     font-size: 8pt;
 }
-QLabel#DragGrip {
-    color: __ACCENT__;
-    font-weight: 800;
-}
 QLabel#ResizeGrip {
     color: #5c6d74;
     font-size: 7.5pt;
     font-weight: 600;
+}
+QLabel#WorkspaceNotice {
+    color: #8d9ba1;
+}
+QLabel#AppName {
+    color: #f8efe2;
+    font-size: 16pt;
+    font-weight: 700;
+}
+QLabel#FocusClock {
+    color: __ACCENT__;
+    font-size: 32pt;
+    font-weight: 700;
+    qproperty-alignment: AlignCenter;
 }
 QLineEdit, QTextEdit, QComboBox, QDateEdit, QSpinBox {
     background: #0f1418;
