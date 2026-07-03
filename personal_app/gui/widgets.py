@@ -49,7 +49,7 @@ class Compartment(QFrame):
             self.layout.addWidget(desc)
 
     def mousePressEvent(self, event) -> None:
-        if event.button() == Qt.LeftButton:
+        if self._grid_mode and event.button() == Qt.LeftButton:
             self._drag_start = event.position().toPoint()
             self._global_start = event.globalPosition().toPoint()
             self._start_pos = self.pos()
@@ -62,7 +62,7 @@ class Compartment(QFrame):
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event) -> None:
-        if event.buttons() & Qt.LeftButton:
+        if self._grid_mode and event.buttons() & Qt.LeftButton:
             delta = event.globalPosition().toPoint() - self._global_start
             parent = self.parentWidget()
             if self._resize_edges:
@@ -91,6 +91,9 @@ class Compartment(QFrame):
         super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event) -> None:
+        if not self._grid_mode:
+            super().mouseReleaseEvent(event)
+            return
         self.setProperty("dragging", False)
         self.style().unpolish(self)
         self.style().polish(self)

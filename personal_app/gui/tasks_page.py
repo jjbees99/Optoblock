@@ -23,7 +23,7 @@ class TasksPage(Compartment):
         self.table.horizontalHeader().setStretchLastSection(True)
         self.table.verticalHeader().setVisible(False)
         controls = QHBoxLayout()
-        add = QPushButton("Add")
+        add = QPushButton("Add new")
         save = subtle_button("Save")
         archive_done = subtle_button("Archive done")
         remove = subtle_button("Remove")

@@ -31,6 +31,7 @@ class FinanceManager:
                 ],
             )
             conn.commit()
+        self.db.write_readable_snapshot()
 
     def totals(self) -> dict:
         rows = self.list()

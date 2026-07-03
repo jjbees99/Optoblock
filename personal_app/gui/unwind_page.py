@@ -27,7 +27,7 @@ class UnwindPage(Compartment):
         self.category_filter.currentTextChanged.connect(self.refresh)
 
         controls = QHBoxLayout()
-        add = QPushButton("Add")
+        add = QPushButton("Add new")
         save = subtle_button("Save")
         done = subtle_button("Done today")
         suggest = subtle_button("Suggest")

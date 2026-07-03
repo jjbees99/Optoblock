@@ -9,6 +9,7 @@ DEFAULTS = {
     "accent_color": "#63d4c7",
     "table_color": "#1f2a2e",
     "compact_mode": "Comfortable",
+    "workspace_theme": "Light",
 }
 
 

@@ -25,7 +25,7 @@ class ShoppingPage(Compartment):
         self.table.verticalHeader().setDefaultSectionSize(24)
 
         controls = QHBoxLayout()
-        add = QPushButton("Add")
+        add = QPushButton("Add new")
         save = subtle_button("Save")
         move = subtle_button("Move")
         archive = subtle_button("Archive bought")

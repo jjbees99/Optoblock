@@ -1,8 +1,8 @@
-from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QAbstractItemView, QComboBox, QHBoxLayout, QPushButton, QTableWidget, QTableWidgetItem
+from PySide6.QtCore import Qt, QTimer
+from PySide6.QtWidgets import QAbstractItemView, QComboBox, QHBoxLayout, QMessageBox, QPushButton, QTableWidget, QTableWidgetItem
 
 from personal_app.app import AppContext
-from personal_app.gui.widgets import Compartment, subtle_button
+from personal_app.gui.widgets import Compartment, danger_button, subtle_button
 
 
 PROJECT_COLUMNS = ["Colour", "Title", "Description", "Category", "Status", "Next Action", "Action Done"]
@@ -19,23 +19,31 @@ class ProjectsPage(Compartment):
     def __init__(self, context: AppContext) -> None:
         super().__init__("Projects", "Spreadsheet project board with status, next actions, and five colour progress markers.", "Projects")
         self.context = context
+        self._loading = False
+        self._save_timer = QTimer(self)
+        self._save_timer.setSingleShot(True)
+        self._save_timer.setInterval(350)
+        self._save_timer.timeout.connect(self.save_without_refresh)
         self.table = QTableWidget(0, len(PROJECT_COLUMNS))
         self.table.setHorizontalHeaderLabels(PROJECT_COLUMNS)
         self.table.setAlternatingRowColors(True)
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.horizontalHeader().setStretchLastSection(True)
         self.table.verticalHeader().setVisible(False)
+        self.table.itemChanged.connect(self._schedule_save)
 
         controls = QHBoxLayout()
-        add = QPushButton("Add")
+        add = QPushButton("Add new")
         save = subtle_button("Save")
         convert = subtle_button("To task")
         archive = subtle_button("Archive")
+        delete = danger_button("Delete")
         add.clicked.connect(self.add_row)
         save.clicked.connect(self.save)
         convert.clicked.connect(self.convert)
         archive.clicked.connect(self.archive_row)
-        for button in (add, save, convert, archive):
+        delete.clicked.connect(self.delete_row)
+        for button in (add, save, convert, archive, delete):
             controls.addWidget(button)
         controls.addStretch(1)
 
@@ -44,6 +52,8 @@ class ProjectsPage(Compartment):
         self.refresh()
 
     def refresh(self) -> None:
+        self._save_timer.stop()
+        self._loading = True
         self.table.setRowCount(0)
         for row in self.context.projects.list(include_archived=True):
             self.add_row(
@@ -57,6 +67,7 @@ class ProjectsPage(Compartment):
                     bool(row["next_action_done"]),
                 ]
             )
+        self._loading = False
 
     def add_row(self, values: list | None = None) -> None:
         values = values or ["Red", "", "", "", "Idea", "", False]
@@ -67,6 +78,7 @@ class ProjectsPage(Compartment):
         colour.addItems(list(PROJECT_COLOURS))
         colour.setCurrentText(values[0] if values[0] in PROJECT_COLOURS else "Red")
         colour.currentTextChanged.connect(lambda _text, row=row_index: self.paint_colour_cell(row))
+        colour.currentTextChanged.connect(self._schedule_save)
         self.table.setCellWidget(row_index, 0, colour)
 
         for col, value in enumerate(values[1:4], start=1):
@@ -75,6 +87,7 @@ class ProjectsPage(Compartment):
         status = QComboBox()
         status.addItems(["Idea", "Planning", "In Progress", "Paused", "Completed", "Archived"])
         status.setCurrentText(values[4] or "Idea")
+        status.currentTextChanged.connect(self._schedule_save)
         self.table.setCellWidget(row_index, 4, status)
 
         self.table.setItem(row_index, 5, QTableWidgetItem(str(values[5])))
@@ -93,6 +106,14 @@ class ProjectsPage(Compartment):
         combo.setStyleSheet(f"QComboBox {{ background: {colour}; color: #071010; font-weight: 700; }}")
 
     def save(self) -> None:
+        self.save_without_refresh()
+        self.refresh()
+
+    def save_without_refresh(self) -> None:
+        """Persist the visible board without disturbing the user's current edit."""
+        if self._loading:
+            return
+        self._save_timer.stop()
         rows = []
         for row in range(self.table.rowCount()):
             title = self._cell(row, 1)
@@ -110,7 +131,10 @@ class ProjectsPage(Compartment):
                 }
             )
         self.context.projects.replace_all(rows)
-        self.refresh()
+
+    def _schedule_save(self, *_args) -> None:
+        if not self._loading:
+            self._save_timer.start()
 
     def convert(self) -> None:
         row = self.table.currentRow()
@@ -133,7 +157,9 @@ class ProjectsPage(Compartment):
 
     def delete_row(self) -> None:
         row = self.table.currentRow()
-        if row >= 0:
+        if row >= 0 and QMessageBox.question(
+            self, "Delete project?", "Are you sure you want to delete this project? This cannot be undone."
+        ) == QMessageBox.Yes:
             self.table.removeRow(row)
             self.save()
 

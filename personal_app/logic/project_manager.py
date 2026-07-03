@@ -69,6 +69,7 @@ class ProjectManager:
                 ],
             )
             conn.commit()
+        self.db.write_readable_snapshot()
 
     def archive(self, project_id: int) -> None:
         self.db.execute("UPDATE projects SET status='Archived' WHERE id=?", (project_id,))

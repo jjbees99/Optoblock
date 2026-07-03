@@ -9,8 +9,10 @@ ALLOWED_SIZES = {(1, 1), (1, 2), (2, 1), (2, 2)}
 
 
 class DashboardLayout:
-    def __init__(self, modules: list[DashboardModule] | None = None) -> None:
+    def __init__(self, modules: list[DashboardModule] | None = None, columns: int = GRID_COLUMNS, rows: int = GRID_ROWS) -> None:
         self.modules = modules or []
+        self.columns = columns
+        self.rows = rows
 
     def module(self, module_id: str) -> DashboardModule | None:
         return next((module for module in self.modules if module.id == module_id), None)
@@ -25,7 +27,7 @@ class DashboardLayout:
     ) -> bool:
         if (width, height) not in ALLOWED_SIZES:
             return False
-        if x < 0 or y < 0 or x + width > GRID_COLUMNS or y + height > GRID_ROWS:
+        if x < 0 or y < 0 or x + width > self.columns or y + height > self.rows:
             return False
         requested = self._cells(x, y, width, height)
         for module in self.modules:
@@ -46,8 +48,8 @@ class DashboardLayout:
         return True
 
     def first_available(self, width: int = 1, height: int = 1, module_id: str = "") -> tuple[int, int] | None:
-        for y in range(GRID_ROWS):
-            for x in range(GRID_COLUMNS):
+        for y in range(self.rows):
+            for x in range(self.columns):
                 if self.can_place(module_id, x, y, width, height):
                     return x, y
         return None

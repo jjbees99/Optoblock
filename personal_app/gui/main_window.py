@@ -1,312 +1,245 @@
-from PySide6.QtCore import QRect, QTimer
-from PySide6.QtWidgets import (
-    QCheckBox,
-    QComboBox,
-    QFrame,
-    QHBoxLayout,
-    QLabel,
-    QMainWindow,
-    QMenu,
-    QMessageBox,
-    QToolButton,
-    QVBoxLayout,
-    QWidget,
-    QWidgetAction,
-)
+from __future__ import annotations
+
+from PySide6.QtCore import QEasingCurve, QParallelAnimationGroup, QPoint, QPropertyAnimation, Qt, QTimer
+from PySide6.QtGui import QColor, QIcon, QPixmap
+from PySide6.QtWidgets import QFrame, QGraphicsOpacityEffect, QHBoxLayout, QLabel, QListWidget, QListWidgetItem, QMainWindow, QMessageBox, QPushButton, QStackedWidget, QVBoxLayout, QWidget
 
 from personal_app.app import AppContext
-from personal_app.data.models import DashboardModule
+from personal_app.gui.dashboard_board import DashboardBoard
 from personal_app.gui.module_registry import MODULE_OUTLINES, MODULE_TITLES, module_factory
-from personal_app.gui.styles import DARK, LIGHT
-from personal_app.logic.dashboard_layout import GRID_COLUMNS, GRID_ROWS, DashboardLayout
-from personal_app.logic.dashboard_storage import DashboardStorage
+from personal_app.gui.styles import NOTION_DARK, NOTION_LIGHT
 
 
-MODULES = list(MODULE_TITLES)
-FOCUS_LAYOUT = [
-    ("Tasks", 0, 0, 1, 1),
-    ("Shopping", 1, 0, 1, 1),
-    ("Voice Brain Dump", 2, 0, 1, 2),
-    ("Archive", 0, 1, 1, 1),
-    ("Projects", 1, 1, 1, 1),
-    ("Unwind", 0, 2, 1, 1),
-    ("Focus Timer", 1, 2, 1, 1),
+PRIMARY_MODULES = [
+    "Dashboard", "Tasks", "Projects", "Shopping", "Brain Dump Scanner",
+    "Bills & Renewals", "Documents", "Errands & Appointments", "Follow-Up",
+    "Travel & Plans", "Home / Flat / Living", "Journal", "Notes", "Archive",
 ]
-UNWINDING_LAYOUT = [
-    ("Unwind", 0, 0, 2, 2),
-    ("Recipes", 2, 0, 1, 2),
-    ("Shopping", 0, 2, 1, 1),
-    ("Brain Dump Scanner", 1, 2, 1, 1),
-    ("Archive", 2, 2, 1, 1),
-]
-PROFILE_LAYOUTS = {"Focus Work": FOCUS_LAYOUT, "Unwinding": UNWINDING_LAYOUT}
-GRID_MARGIN = 14
-GRID_GAP = 10
+MORE_MODULES = ["Finance", "Recipes", "Focus Timer", "Voice Brain Dump", "Unwind", "Settings"]
 
 
 class MainWindow(QMainWindow):
+    """Focused workspace shell; module implementations remain independent and reusable."""
+
     def __init__(self, context: AppContext) -> None:
         super().__init__()
         self.context = context
-        self.storage = DashboardStorage()
-        self.active_profile, self.profiles = self.storage.load_profiles()
-        for profile_name in PROFILE_LAYOUTS:
-            candidate = DashboardLayout(self.profiles.get(profile_name, []))
-            if not candidate.modules or not candidate.is_valid():
-                self.profiles[profile_name] = self._default_modules(profile_name)
-        if self.active_profile not in self.profiles:
-            self.active_profile = "Focus Work"
-        self.dashboard = DashboardLayout(self.profiles[self.active_profile])
-        self._persist_profiles()
-
-        self.setWindowTitle("Optoblock")
-        self.resize(1320, 860)
-        self.module_checks: dict[str, QCheckBox] = {}
         self.widgets_by_module: dict[str, QWidget] = {}
-        self.slot_frames: list[QFrame] = []
+        self.nav_rows: dict[int, str] = {}
+        self._page_transition: QParallelAnimationGroup | None = None
+        self._transition_widget: QWidget | None = None
+        self.setWindowTitle("Optoblock — Life Admin")
+        self.resize(1280, 820)
+        self.setMinimumSize(900, 620)
 
-        self.root = QWidget()
-        self.root.setObjectName("Root")
-        self.setCentralWidget(self.root)
-        self.outer = QVBoxLayout(self.root)
-        self.outer.setContentsMargins(18, 14, 18, 18)
-        self.outer.setSpacing(10)
-        self._build_top_bar()
+        root = QWidget()
+        root.setObjectName("Root")
+        self.setCentralWidget(root)
+        shell = QHBoxLayout(root)
+        shell.setContentsMargins(0, 0, 0, 0)
+        shell.setSpacing(0)
 
-        self.table = QFrame()
-        self.table.setObjectName("Table")
-        self.table.setMinimumHeight(680)
-        self.outer.addWidget(self.table, 1)
-        self._build_slots()
+        sidebar = QFrame()
+        sidebar.setObjectName("Sidebar")
+        sidebar.setFixedWidth(244)
+        side = QVBoxLayout(sidebar)
+        side.setContentsMargins(16, 22, 12, 18)
+        side.setSpacing(10)
+        brand = QLabel("Optoblock")
+        brand.setObjectName("AppName")
+        caption = QLabel("Life Admin OS")
+        caption.setObjectName("SidebarCaption")
+        side.addWidget(brand)
+        side.addWidget(caption)
+
+        self.navigation = QListWidget()
+        self.navigation.setObjectName("SidebarNav")
+        self.navigation.setFocusPolicy(Qt.NoFocus)
+        self._add_section("Workspace", PRIMARY_MODULES)
+        self._add_section("More", MORE_MODULES)
+        self.navigation.currentRowChanged.connect(self._navigation_changed)
+        side.addWidget(self.navigation, 1)
+        self.theme_toggle = QPushButton()
+        self.theme_toggle.setObjectName("ThemeToggle")
+        self.theme_toggle.clicked.connect(self.toggle_theme)
+        side.addWidget(self.theme_toggle)
+        footer = QLabel("Everything stays on this device")
+        footer.setObjectName("SidebarFooter")
+        side.addWidget(footer)
+
+        content = QFrame()
+        content.setObjectName("ContentArea")
+        self.content = content
+        content_layout = QVBoxLayout(content)
+        content_layout.setContentsMargins(44, 34, 44, 36)
+        content_layout.setSpacing(0)
+        self.stack = QStackedWidget()
+        self.stack.setObjectName("PageStack")
+        content_layout.addWidget(self.stack)
+        shell.addWidget(sidebar)
+        shell.addWidget(content, 1)
 
         self.apply_theme()
-        self.rebuild_table()
+        first_row = next(row for row, name in self.nav_rows.items() if name == "Dashboard")
+        self.navigation.setCurrentRow(first_row)
+        if not self.context.journal.completed_today():
+            QTimer.singleShot(500, self._show_journal_reminder)
 
-    def _build_top_bar(self) -> None:
-        top = QHBoxLayout()
-        app_name = QLabel("Optoblock")
-        app_name.setObjectName("AppName")
-        top.addWidget(app_name)
-        self.notice = QLabel("Drag modules or their edges. Changes save to the selected loadout.")
-        self.notice.setObjectName("WorkspaceNotice")
-        top.addWidget(self.notice, 1)
+    def _add_section(self, title: str, modules: list[str]) -> None:
+        heading = QListWidgetItem(title.upper())
+        heading.setFlags(Qt.NoItemFlags)
+        heading.setData(Qt.UserRole, "section")
+        self.navigation.addItem(heading)
+        for module in modules:
+            item = QListWidgetItem(self._display_name(module))
+            item.setData(Qt.UserRole, module)
+            colour = MODULE_OUTLINES.get(module, "#cbd5e1")
+            marker = QPixmap(9, 22)
+            marker.fill(Qt.transparent)
+            from PySide6.QtGui import QPainter
+            painter = QPainter(marker)
+            painter.setRenderHint(QPainter.Antialiasing)
+            painter.setBrush(QColor(colour)); painter.setPen(Qt.NoPen)
+            painter.drawRoundedRect(1, 3, 5, 16, 2, 2); painter.end()
+            item.setIcon(QIcon(marker))
+            self.navigation.addItem(item)
+            self.nav_rows[self.navigation.count() - 1] = module
 
-        self.profile_picker = QComboBox()
-        self.profile_picker.setObjectName("ProfilePicker")
-        self.profile_picker.addItems(PROFILE_LAYOUTS)
-        self.profile_picker.setCurrentText(self.active_profile)
-        self.profile_picker.currentTextChanged.connect(self.switch_profile)
-        top.addWidget(self.profile_picker)
+    @staticmethod
+    def _display_name(module: str) -> str:
+        aliases = {
+            "Tasks": "To-Do", "Brain Dump Scanner": "Brain Dump",
+            "Documents": "Documents", "Follow-Up": "Follow-Ups",
+            "Home / Flat / Living": "Home / Flat",
+        }
+        return aliases.get(module, MODULE_TITLES[module])
 
-        picker = QToolButton()
-        picker.setText("Modules")
-        picker.setPopupMode(QToolButton.InstantPopup)
-        menu = QMenu(picker)
-        active = {module.id for module in self.dashboard.modules}
-        for module in MODULES:
-            check = QCheckBox(MODULE_TITLES[module])
-            check.setChecked(module in active)
-            check.stateChanged.connect(lambda _state, name=module: self._module_changed(name))
-            action = QWidgetAction(menu)
-            action.setDefaultWidget(check)
-            menu.addAction(action)
-            self.module_checks[module] = check
-        picker.setMenu(menu)
-        top.addWidget(picker)
-        self.outer.addLayout(top)
-
-    def _build_slots(self) -> None:
-        for _ in range(GRID_COLUMNS * GRID_ROWS):
-            slot = QFrame(self.table)
-            slot.setObjectName("GridSlot")
-            slot.lower()
-            slot.show()
-            self.slot_frames.append(slot)
-
-    def _module_changed(self, name: str) -> None:
-        check = self.module_checks[name]
-        if check.isChecked():
-            location = self.dashboard.first_available(module_id=name)
-            if location is None:
-                check.blockSignals(True)
-                check.setChecked(False)
-                check.blockSignals(False)
-                self._show_error("All 9 dashboard slots are occupied. Move, resize, or remove a module first.")
-                return
-            x, y = location
-            self.dashboard.add(
-                DashboardModule(
-                    id=name,
-                    title=MODULE_TITLES[name],
-                    type=name,
-                    x=x,
-                    y=y,
-                )
-            )
-        else:
-            self.dashboard.remove(name)
-        self._save_and_rebuild()
-
-    def rebuild_table(self) -> None:
-        for widget in list(self.widgets_by_module.values()):
-            widget.deleteLater()
-        self.widgets_by_module.clear()
-
-        for module in self.dashboard.modules:
-            widget = module_factory(self.context, module.type, self.apply_theme)()
-            widget.module_name = module.id
-            widget.set_grid_mode(True)
-            widget.set_outline_colour(MODULE_OUTLINES.get(module.type, "#63d4c7"))
-            widget.dropped.connect(self.move_module_at_drop)
-            widget.geometry_changed.connect(self.resize_module_from_edges)
+    def _navigation_changed(self, row: int) -> None:
+        module = self.nav_rows.get(row)
+        if not module:
+            return
+        colour = MODULE_OUTLINES.get(module, "#cbd5e1")
+        self.content.setStyleSheet(f"QFrame#ContentArea {{ border: 3px solid {colour}; border-radius: 10px; }}")
+        widget = self.widgets_by_module.get(module)
+        if widget is None:
+            if module == "Dashboard":
+                widget = DashboardBoard(self.context, self.refresh_destination_modules)
+            else:
+                widget = module_factory(self.context, module, self.refresh_appearance)()
+                widget.module_name = module
+                widget.set_grid_mode(False)
             if hasattr(widget, "items_added"):
                 widget.items_added.connect(self.refresh_destination_modules)
             if hasattr(widget, "archive_changed"):
                 widget.archive_changed.connect(lambda: self.refresh_module("Archive"))
-            widget.setParent(self.table)
-            widget.show()
-            self.widgets_by_module[module.id] = widget
-        QTimer.singleShot(0, self.position_grid_items)
+            self.widgets_by_module[module] = widget
+            self.stack.addWidget(widget)
+        refresh = getattr(widget, "refresh", None)
+        if callable(refresh):
+            refresh()
+        self.stack.setCurrentWidget(widget)
+        self._animate_page(widget)
+
+    def _animate_page(self, widget: QWidget) -> None:
+        """Fade and slide the active page in, without blocking rapid navigation."""
+        if self._page_transition is not None:
+            self._page_transition.stop()
+        if self._transition_widget is not None:
+            self._transition_widget.setGraphicsEffect(None)
+
+        effect = QGraphicsOpacityEffect(widget)
+        effect.setOpacity(0.0)
+        widget.setGraphicsEffect(effect)
+
+        destination = widget.pos()
+        # Some pages expose domain actions named ``move`` (for example Shopping),
+        # so call QWidget's geometry method explicitly rather than the override.
+        QWidget.move(widget, destination + QPoint(28, 0))
+
+        fade = QPropertyAnimation(effect, b"opacity", widget)
+        fade.setDuration(260)
+        fade.setStartValue(0.0)
+        fade.setEndValue(1.0)
+        fade.setEasingCurve(QEasingCurve.OutCubic)
+
+        slide = QPropertyAnimation(widget, b"pos", widget)
+        slide.setDuration(320)
+        slide.setStartValue(destination + QPoint(28, 0))
+        slide.setEndValue(destination)
+        slide.setEasingCurve(QEasingCurve.OutCubic)
+
+        transition = QParallelAnimationGroup(self)
+        transition.addAnimation(fade)
+        transition.addAnimation(slide)
+        transition.finished.connect(lambda w=widget, e=effect: self._finish_page_transition(w, e))
+        self._page_transition = transition
+        self._transition_widget = widget
+        transition.start()
+
+    def _finish_page_transition(self, widget: QWidget, effect: QGraphicsOpacityEffect) -> None:
+        if widget.graphicsEffect() is effect:
+            effect.setOpacity(1.0)
+            widget.setGraphicsEffect(None)
+        if self._transition_widget is widget:
+            self._transition_widget = None
+            self._page_transition = None
+
+    def _show_journal_reminder(self) -> None:
+        if self.context.journal.completed_today():
+            return
+        reminder = QMessageBox(self)
+        reminder.setWindowTitle("Your daily journal")
+        reminder.setText("A small moment for today")
+        reminder.setInformativeText("Add a few words, a poem, a story, or a drawing. There is no minimum.")
+        open_button = reminder.addButton("Open journal", QMessageBox.AcceptRole)
+        reminder.addButton("Later", QMessageBox.RejectRole)
+        reminder.exec()
+        if reminder.clickedButton() is open_button:
+            row = next((row for row, name in self.nav_rows.items() if name == "Journal"), None)
+            if row is not None:
+                self.navigation.setCurrentRow(row)
 
     def refresh_destination_modules(self, counts: dict[str, int]) -> None:
         destinations = {
-            "To-Do": "Tasks",
-            "Reminder Candidate": "Tasks",
-            "Shopping": "Shopping",
-            "Projects / Learning": "Projects",
-            "Archive / Notes": "Archive",
+            "To-Do": "Tasks", "Reminder Candidate": "Tasks", "Shopping": "Shopping",
+            "Projects / Learning": "Projects", "Projects": "Projects", "Archive / Notes": "Archive",
+            "Inbox": "Brain Dump Scanner", "Follow-Up": "Follow-Up",
+            "Bills & Renewals": "Bills & Renewals", "Errands & Appointments": "Errands & Appointments",
         }
-        for category, module_name in destinations.items():
-            if not counts.get(category):
-                continue
-            self.refresh_module(module_name)
+        for category, module in destinations.items():
+            if counts.get(category):
+                self.refresh_module(module)
 
-    def refresh_module(self, module_name: str) -> None:
-        widget = self.widgets_by_module.get(module_name)
+    def refresh_module(self, module: str) -> None:
+        widget = self.widgets_by_module.get(module)
         refresh = getattr(widget, "refresh", None)
         if callable(refresh):
             refresh()
 
-    def move_module_at_drop(self, module_id: str, global_pos) -> None:
-        module = self.dashboard.module(module_id)
-        if not module:
-            return
-        local = self.table.mapFromGlobal(global_pos)
-        cell_width, cell_height = self._cell_size()
-        x = round((local.x() - GRID_MARGIN - cell_width / 2) / (cell_width + GRID_GAP))
-        y = round((local.y() - GRID_MARGIN - cell_height / 2) / (cell_height + GRID_GAP))
-        if not self.dashboard.place(module_id, x, y, module.width, module.height):
-            self.position_grid_items()
-            self._show_error("That position does not have enough free slots for this module.")
-            return
-        self._persist_profiles()
-        self.position_grid_items()
-        self._set_notice(f"{module.title} moved to row {y + 1}, column {x + 1}.")
-
-    def resize_module_from_edges(self, module_id: str) -> None:
-        module = self.dashboard.module(module_id)
-        widget = self.widgets_by_module.get(module_id)
-        if not module or not widget:
-            return
-        cell_width, cell_height = self._cell_size()
-        x = round((widget.x() - GRID_MARGIN) / (cell_width + GRID_GAP))
-        y = round((widget.y() - GRID_MARGIN) / (cell_height + GRID_GAP))
-        width = max(1, min(2, round((widget.width() + GRID_GAP) / (cell_width + GRID_GAP))))
-        height = max(1, min(2, round((widget.height() + GRID_GAP) / (cell_height + GRID_GAP))))
-        if not self.dashboard.place(module_id, x, y, width, height):
-            self.position_grid_items()
-            self._show_error(f"{module.title} cannot fill those slots because they are occupied.")
-            return
-        self._persist_profiles()
-        self.position_grid_items()
-        self._set_notice(f"{module.title} resized to {width} x {height}.")
-
-    def switch_profile(self, profile_name: str) -> None:
-        if profile_name == self.active_profile or profile_name not in self.profiles:
-            return
-        self._persist_profiles()
-        self.active_profile = profile_name
-        self.dashboard = DashboardLayout(self.profiles[profile_name])
-        self._sync_module_checks()
-        self._persist_profiles()
-        self.rebuild_table()
-        self._set_notice(f"Loaded {profile_name} loadout.")
-
-    def position_grid_items(self) -> None:
-        for index, slot in enumerate(self.slot_frames):
-            slot.setGeometry(self._grid_geometry(index % GRID_COLUMNS, index // GRID_COLUMNS, 1, 1))
-            slot.lower()
-        for module in self.dashboard.modules:
-            widget = self.widgets_by_module.get(module.id)
-            if widget:
-                widget.setGeometry(self._grid_geometry(module.x, module.y, module.width, module.height))
-                widget.raise_()
-
-    def _grid_geometry(self, x: int, y: int, width: int, height: int) -> QRect:
-        cell_width, cell_height = self._cell_size()
-        left = GRID_MARGIN + x * (cell_width + GRID_GAP)
-        top = GRID_MARGIN + y * (cell_height + GRID_GAP)
-        pixel_width = width * cell_width + (width - 1) * GRID_GAP
-        pixel_height = height * cell_height + (height - 1) * GRID_GAP
-        return QRect(left, top, pixel_width, pixel_height)
-
-    def _cell_size(self) -> tuple[int, int]:
-        width = max(1, (self.table.width() - 2 * GRID_MARGIN - (GRID_COLUMNS - 1) * GRID_GAP) // GRID_COLUMNS)
-        height = max(1, (self.table.height() - 2 * GRID_MARGIN - (GRID_ROWS - 1) * GRID_GAP) // GRID_ROWS)
-        return width, height
-
-    def _save_and_rebuild(self) -> None:
-        self._persist_profiles()
-        self.rebuild_table()
-
-    def _persist_profiles(self) -> None:
-        self.profiles[self.active_profile] = self.dashboard.modules
-        self.storage.save_profiles(self.active_profile, self.profiles)
-
-    def _sync_module_checks(self) -> None:
-        active = {module.id for module in self.dashboard.modules}
-        for name, check in self.module_checks.items():
-            check.blockSignals(True)
-            check.setChecked(name in active)
-            check.blockSignals(False)
-
-    def _show_error(self, message: str) -> None:
-        self._set_notice(message)
-        QMessageBox.information(self, "Dashboard layout", message)
-
-    def _set_notice(self, message: str) -> None:
-        self.notice.setText(message)
-
-    def _default_modules(self, profile_name: str = "Focus Work") -> list[DashboardModule]:
-        return [
-            DashboardModule(
-                id=name,
-                title=MODULE_TITLES[name],
-                type=name,
-                x=x,
-                y=y,
-                width=width,
-                height=height,
-            )
-            for name, x, y, width, height in PROFILE_LAYOUTS[profile_name]
-        ]
-
-    def resizeEvent(self, event) -> None:
-        super().resizeEvent(event)
-        self.position_grid_items()
-
-    def showEvent(self, event) -> None:
-        super().showEvent(event)
-        self.position_grid_items()
-
     def apply_theme(self) -> None:
-        theme = self.context.settings.get("theme") or "Dark"
-        stylesheet = DARK if theme == "Dark" else LIGHT
-        accent = self.context.settings.get("accent_color") or "#63d4c7"
-        table = self.context.settings.get("table_color") or "#1f2a2e"
-        stylesheet = stylesheet.replace("__ACCENT__", accent).replace("__TABLE__", table)
-        self.setStyleSheet(stylesheet)
+        # The workspace deliberately uses one calm visual language; the accent remains user-configurable.
+        accent = self.context.settings.get("accent_color") or "#37352f"
+        dark = self.context.settings.get("workspace_theme") == "Dark"
+        stylesheet = NOTION_DARK if dark else NOTION_LIGHT
+        self.setStyleSheet(stylesheet.replace("__ACCENT__", accent))
+        self.theme_toggle.setText("Light mode" if dark else "Dark mode")
+
+    def toggle_theme(self) -> None:
+        current = self.context.settings.get("workspace_theme") or "Light"
+        self.context.settings.set("workspace_theme", "Light" if current == "Dark" else "Dark")
+        self.apply_theme()
 
     def refresh_appearance(self) -> None:
         self.apply_theme()
-        self.rebuild_table()
+
+    def closeEvent(self, event) -> None:
+        for widget in self.widgets_by_module.values():
+            save = (getattr(widget, "flush_pending", None) or getattr(widget, "save_now", None)
+                    or getattr(widget, "save_without_refresh", None))
+            if callable(save): save()
+        board = self.widgets_by_module.get("Dashboard")
+        board_save = getattr(board, "_save_project", None)
+        if callable(board_save):
+            board_save()
+        self.context.db.write_readable_snapshot()
+        super().closeEvent(event)
