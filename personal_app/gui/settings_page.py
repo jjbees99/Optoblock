@@ -11,9 +11,14 @@ class SettingsPage(Compartment):
         self.theme_changed = theme_changed
         form = QFormLayout()
         self.theme = QComboBox()
-        self.theme.addItems(["Dark", "Warm Light"])
-        self.theme.setCurrentText(context.settings.get("theme") or "Dark")
+        self.theme.addItems(["Cream", "Ink", "Peach", "Lilac"])
+        current_theme = context.settings.get("workspace_theme") or "Cream"
+        self.theme.setCurrentText(current_theme if current_theme in {"Cream", "Ink", "Peach", "Lilac"} else "Cream")
         self.theme.currentTextChanged.connect(self.save)
+        self.language = QComboBox()
+        self.language.addItems(["English", "Deutsch"])
+        self.language.setCurrentText(context.settings.get("language") or "English")
+        self.language.currentTextChanged.connect(self.save)
         self.accent = QLineEdit(context.settings.get("accent_color") or "#63d4c7")
         self.table_color = QLineEdit(context.settings.get("table_color") or "#1f2a2e")
         self.density = QComboBox()
@@ -24,7 +29,8 @@ class SettingsPage(Compartment):
         self.density.currentTextChanged.connect(self.save)
         self.backup = QLineEdit(context.settings.get("backup_location") or "")
         self.backup.textChanged.connect(self.save)
-        form.addRow("Theme", self.theme)
+        form.addRow("Colour scheme", self.theme)
+        form.addRow("Language / Sprache", self.language)
         form.addRow("Accent colour", self.accent)
         form.addRow("Table colour", self.table_color)
         form.addRow("Density", self.density)
@@ -40,7 +46,8 @@ class SettingsPage(Compartment):
         self.layout.addWidget(self.notice)
 
     def save(self) -> None:
-        self.context.settings.set("theme", self.theme.currentText())
+        self.context.settings.set("workspace_theme", self.theme.currentText())
+        self.context.settings.set("language", self.language.currentText())
         self.context.settings.set("accent_color", self.accent.text().strip() or "#63d4c7")
         self.context.settings.set("table_color", self.table_color.text().strip() or "#1f2a2e")
         self.context.settings.set("compact_mode", self.density.currentText())

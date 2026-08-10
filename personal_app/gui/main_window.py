@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from PySide6.QtCore import QEasingCurve, QParallelAnimationGroup, QPoint, QPropertyAnimation, Qt, QTimer
 from PySide6.QtGui import QColor, QIcon, QPixmap
 from PySide6.QtWidgets import QFrame, QGraphicsOpacityEffect, QHBoxLayout, QLabel, QListWidget, QListWidgetItem, QMainWindow, QMessageBox, QPushButton, QStackedWidget, QVBoxLayout, QWidget
@@ -7,7 +9,7 @@ from PySide6.QtWidgets import QFrame, QGraphicsOpacityEffect, QHBoxLayout, QLabe
 from personal_app.app import AppContext
 from personal_app.gui.dashboard_board import DashboardBoard
 from personal_app.gui.module_registry import MODULE_OUTLINES, MODULE_TITLES, module_factory
-from personal_app.gui.styles import NOTION_DARK, NOTION_LIGHT
+from personal_app.gui.styles import festival_stylesheet
 
 
 PRIMARY_MODULES = [
@@ -16,6 +18,17 @@ PRIMARY_MODULES = [
     "Travel & Plans", "Home / Flat / Living", "Journal", "Notes", "Archive",
 ]
 MORE_MODULES = ["Finance", "Recipes", "Focus Timer", "Voice Brain Dump", "Unwind", "Settings"]
+
+GERMAN = {
+    "Workspace": "Arbeitsbereich", "More": "Mehr", "Dashboard": "Übersicht", "Tasks": "Aufgaben",
+    "Projects": "Projekte", "Shopping": "Einkaufen", "Brain Dump Scanner": "Gedankenspeicher",
+    "Bills & Renewals": "Rechnungen & Abos", "Documents": "Dokumente",
+    "Errands & Appointments": "Erledigungen & Termine", "Follow-Up": "Nachfassen",
+    "Travel & Plans": "Reisen & Pläne", "Home / Flat / Living": "Wohnen", "Journal": "Tagebuch",
+    "Notes": "Notizen", "Archive": "Archiv", "Finance": "Finanzen", "Recipes": "Rezepte",
+    "Focus Timer": "Fokus-Timer", "Voice Brain Dump": "Sprachnotizen", "Unwind": "Ausklang",
+    "Settings": "Einstellungen",
+}
 
 
 class MainWindow(QMainWindow):
@@ -45,12 +58,15 @@ class MainWindow(QMainWindow):
         side = QVBoxLayout(sidebar)
         side.setContentsMargins(16, 22, 12, 18)
         side.setSpacing(10)
-        brand = QLabel("Optoblock")
-        brand.setObjectName("AppName")
-        caption = QLabel("Life Admin OS")
-        caption.setObjectName("SidebarCaption")
-        side.addWidget(brand)
-        side.addWidget(caption)
+        self.brand = QLabel()
+        self.brand.setObjectName("AppName")
+        logo = QPixmap(str(Path(__file__).resolve().parent.parent / "assets" / "optoblock-logo.png"))
+        self.brand.setPixmap(logo.scaledToWidth(174, Qt.SmoothTransformation))
+        self.brand.setToolTip("Optoblock")
+        self.caption = QLabel("LIFE ADMIN / LOCAL SYSTEM")
+        self.caption.setObjectName("SidebarCaption")
+        side.addWidget(self.brand)
+        side.addWidget(self.caption)
 
         self.navigation = QListWidget()
         self.navigation.setObjectName("SidebarNav")
@@ -63,9 +79,10 @@ class MainWindow(QMainWindow):
         self.theme_toggle.setObjectName("ThemeToggle")
         self.theme_toggle.clicked.connect(self.toggle_theme)
         side.addWidget(self.theme_toggle)
-        footer = QLabel("Everything stays on this device")
-        footer.setObjectName("SidebarFooter")
-        side.addWidget(footer)
+        self.footer = QLabel("PRIVATE BY DEFAULT · STORED LOCALLY")
+        self.footer.setWordWrap(True)
+        self.footer.setObjectName("SidebarFooter")
+        side.addWidget(self.footer)
 
         content = QFrame()
         content.setObjectName("ContentArea")
@@ -86,12 +103,12 @@ class MainWindow(QMainWindow):
             QTimer.singleShot(500, self._show_journal_reminder)
 
     def _add_section(self, title: str, modules: list[str]) -> None:
-        heading = QListWidgetItem(title.upper())
+        heading = QListWidgetItem(self._translated(title).upper())
         heading.setFlags(Qt.NoItemFlags)
         heading.setData(Qt.UserRole, "section")
         self.navigation.addItem(heading)
         for module in modules:
-            item = QListWidgetItem(self._display_name(module))
+            item = QListWidgetItem(self._translated(module))
             item.setData(Qt.UserRole, module)
             colour = MODULE_OUTLINES.get(module, "#cbd5e1")
             marker = QPixmap(9, 22)
@@ -113,6 +130,26 @@ class MainWindow(QMainWindow):
             "Home / Flat / Living": "Home / Flat",
         }
         return aliases.get(module, MODULE_TITLES[module])
+
+    def _translated(self, text: str) -> str:
+        if self.context.settings.get("language") == "Deutsch":
+            return GERMAN.get(text, text)
+        return self._display_name(text) if text in MODULE_TITLES else text
+
+    def _refresh_shell_language(self) -> None:
+        german = self.context.settings.get("language") == "Deutsch"
+        self.caption.setText("LEBENSPLANER / LOKALES SYSTEM" if german else "LIFE ADMIN / LOCAL SYSTEM")
+        self.footer.setText("PRIVAT · LOKAL GESPEICHERT" if german else "PRIVATE BY DEFAULT · STORED LOCALLY")
+        section_index = 0
+        for row in range(self.navigation.count()):
+            item = self.navigation.item(row)
+            module = item.data(Qt.UserRole)
+            if module == "section":
+                original = ("Workspace", "More")[section_index]
+                section_index += 1
+                item.setText(self._translated(original).upper())
+            elif module:
+                item.setText(self._translated(module))
 
     def _navigation_changed(self, row: int) -> None:
         module = self.nav_rows.get(row)
@@ -217,16 +254,17 @@ class MainWindow(QMainWindow):
             refresh()
 
     def apply_theme(self) -> None:
-        # The workspace deliberately uses one calm visual language; the accent remains user-configurable.
-        accent = self.context.settings.get("accent_color") or "#37352f"
-        dark = self.context.settings.get("workspace_theme") == "Dark"
-        stylesheet = NOTION_DARK if dark else NOTION_LIGHT
-        self.setStyleSheet(stylesheet.replace("__ACCENT__", accent))
-        self.theme_toggle.setText("Light mode" if dark else "Dark mode")
+        accent = self.context.settings.get("accent_color") or "#ffae82"
+        palette = self.context.settings.get("workspace_theme") or "Cream"
+        if palette in {"Light", "Warm Light"}: palette = "Cream"
+        if palette == "Dark": palette = "Ink"
+        self.setStyleSheet(festival_stylesheet(palette, accent))
+        self.theme_toggle.setText("CREAM MODE" if palette == "Ink" else "INK MODE")
+        self._refresh_shell_language()
 
     def toggle_theme(self) -> None:
-        current = self.context.settings.get("workspace_theme") or "Light"
-        self.context.settings.set("workspace_theme", "Light" if current == "Dark" else "Dark")
+        current = self.context.settings.get("workspace_theme") or "Cream"
+        self.context.settings.set("workspace_theme", "Cream" if current == "Ink" else "Ink")
         self.apply_theme()
 
     def refresh_appearance(self) -> None:

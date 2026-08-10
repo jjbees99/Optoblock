@@ -29,7 +29,9 @@ If the direct download link is unavailable, open the [latest release page](https
 - Focus timer, voice brain dump, and unwind routines
 - Spreadsheet-style finance tracking
 - Bills, documents, errands, follow-ups, travel, and home administration pages
-- Light and dark themes, startup-module selection, and archive view
+- Festival-inspired Cream, Ink, Peach, and Lilac colour schemes
+- English and German workspace navigation, startup-module selection, and archive view
+- Custom Optoblock cube branding across the sidebar and Windows application icon
 - Local SQLite storage plus readable JSON snapshots and backup/restore
 
 ## Your data

@@ -454,3 +454,47 @@ QMenu { background: #252525; color: #e6e6e3; border-color: #444444; }
 QMenu::item:selected { background: #383838; }
 QScrollBar::handle:vertical { background: #555551; }
 """
+
+# Editorial treatment based on the supplied references' principles, not identity.
+FESTIVAL_COMMON = """
+QMainWindow, QWidget#Root { font-family: "Arial", "Helvetica Neue", "Segoe UI Variable", sans-serif; font-size: 10pt; }
+QFrame#Sidebar { border-right: 2px solid __INK__; }
+QLabel#AppName { font-size: 25pt; font-weight: 900; letter-spacing: -2px; padding: 0 8px 2px 8px; }
+QLabel#SidebarCaption, QLabel#SidebarFooter { font-size: 8pt; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; }
+QListWidget#SidebarNav::item { border-radius: 2px; min-height: 30px; padding: 2px 9px; margin: 1px 0; }
+QListWidget#SidebarNav::item:disabled { font-size: 7.5pt; font-weight: 800; letter-spacing: 1px; }
+QLabel#CompartmentTitle, QLabel#BoardTitle { font-size: 28pt; font-weight: 900; letter-spacing: -1px; }
+QLabel#CompartmentDescription, QLabel#BoardDescription { font-size: 9pt; padding-bottom: 14px; }
+QFrame#DashboardCanvas, QFrame#DashboardCanvas QFrame#Compartment, QLineEdit, QTextEdit,
+QComboBox, QDateEdit, QSpinBox, QListWidget, QTableWidget, QTabWidget::pane { border-radius: 3px; }
+QPushButton, QToolButton { border-radius: 3px; padding: 7px 12px; font-weight: 800; }
+QPushButton#ThemeToggle { text-transform: uppercase; letter-spacing: 1px; }
+QHeaderView::section { font-size: 8pt; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; }
+QScrollBar::handle:vertical { border-radius: 2px; }
+"""
+
+FESTIVAL_PALETTES = {
+    "Cream": (NOTION_LIGHT, "#f4f0e4", "#080808", "#ffae82", "#ebe5d7"),
+    "Ink": (NOTION_DARK, "#080808", "#f4f0e4", "#ffae82", "#171717"),
+    "Peach": (NOTION_LIGHT, "#ffae82", "#080808", "#080808", "#f6a276"),
+    "Lilac": (NOTION_LIGHT, "#d8c1ef", "#080808", "#080808", "#cdb2e7"),
+}
+
+
+def festival_stylesheet(palette: str, accent: str = "") -> str:
+    base, ground, ink, default_accent, surface = FESTIVAL_PALETTES.get(palette, FESTIVAL_PALETTES["Cream"])
+    highlight = accent if accent and accent.lower() not in {"#63d4c7", "#37352f"} else default_accent
+    overrides = f"""
+    QMainWindow, QWidget#Root {{ background: {ground}; color: {ink}; }}
+    QFrame#Sidebar {{ background: {ground}; border-right-color: {ink}; }}
+    QFrame#ContentArea, QStackedWidget#PageStack, QFrame#Compartment {{ background: {ground}; }}
+    QFrame#DashboardCanvas {{ background: {surface}; border-color: {ink}; }}
+    QLabel#AppName, QLabel#CompartmentTitle, QLabel#BoardTitle {{ color: {ink}; }}
+    QPushButton {{ background: {ink}; color: {ground}; border: 1px solid {ink}; }}
+    QPushButton:hover {{ background: {highlight}; color: #080808; border-color: {ink}; }}
+    QPushButton#Subtle, QPushButton#ThemeToggle {{ background: transparent; color: {ink}; border: 1px solid {ink}; }}
+    QPushButton#Subtle:hover, QPushButton#ThemeToggle:hover {{ background: {ink}; color: {ground}; }}
+    QListWidget#SidebarNav::item:selected {{ background: {ink}; color: {ground}; }}
+    QListWidget#SidebarNav::item:hover {{ background: {surface}; color: {ink}; }}
+    """
+    return (base + FESTIVAL_COMMON + overrides).replace("__ACCENT__", highlight).replace("__INK__", ink)

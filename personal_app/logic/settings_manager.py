@@ -6,10 +6,11 @@ DEFAULTS = {
     "startup_modules": "Dashboard,Tasks,Projects,Finance",
     "backup_location": "",
     "daily_focus": "",
-    "accent_color": "#63d4c7",
+    "accent_color": "#ffae82",
     "table_color": "#1f2a2e",
     "compact_mode": "Comfortable",
-    "workspace_theme": "Light",
+    "workspace_theme": "Cream",
+    "language": "English",
 }
 
 
