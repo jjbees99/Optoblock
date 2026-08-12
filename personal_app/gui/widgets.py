@@ -42,11 +42,8 @@ class Compartment(QFrame):
         header.addWidget(resize_hint)
         self.resize_hint = resize_hint
         self.layout.addLayout(header)
-        if description:
-            desc = QLabel(description)
-            desc.setObjectName("CompartmentDescription")
-            desc.setWordWrap(True)
-            self.layout.addWidget(desc)
+        # Page titles are intentionally kept clean; supporting guidance belongs in
+        # placeholders and tooltips instead of a sentence beneath every heading.
 
     def mousePressEvent(self, event) -> None:
         if self._grid_mode and event.button() == Qt.LeftButton:

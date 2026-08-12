@@ -34,16 +34,14 @@ class ProjectsPage(Compartment):
 
         controls = QHBoxLayout()
         add = QPushButton("Add new")
-        save = subtle_button("Save")
         convert = subtle_button("To task")
         archive = subtle_button("Archive")
         delete = danger_button("Delete")
         add.clicked.connect(self.add_row)
-        save.clicked.connect(self.save)
         convert.clicked.connect(self.convert)
         archive.clicked.connect(self.archive_row)
         delete.clicked.connect(self.delete_row)
-        for button in (add, save, convert, archive, delete):
+        for button in (add, convert, archive, delete):
             controls.addWidget(button)
         controls.addStretch(1)
 

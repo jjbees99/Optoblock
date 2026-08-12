@@ -1,7 +1,7 @@
 from urllib.parse import quote
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QUrl
+from PySide6.QtCore import Qt, QUrl, QTimer
 from PySide6.QtGui import QDesktopServices, QGuiApplication
 from PySide6.QtWidgets import QAbstractItemView, QComboBox, QHBoxLayout, QLabel, QPushButton, QTableWidget, QTableWidgetItem
 
@@ -16,6 +16,9 @@ class ShoppingPage(Compartment):
     def __init__(self, context: AppContext) -> None:
         super().__init__("Shopping", "Spreadsheet shopping list for groceries and Amazon, with email handoff.", "Shopping")
         self.context = context
+        self._loading = False
+        self._save_timer = QTimer(self); self._save_timer.setSingleShot(True); self._save_timer.setInterval(400)
+        self._save_timer.timeout.connect(self.save)
         self.table = QTableWidget(0, len(SHOPPING_COLUMNS))
         self.table.setHorizontalHeaderLabels(SHOPPING_COLUMNS)
         self.table.setAlternatingRowColors(True)
@@ -23,19 +26,18 @@ class ShoppingPage(Compartment):
         self.table.horizontalHeader().setStretchLastSection(True)
         self.table.verticalHeader().setVisible(False)
         self.table.verticalHeader().setDefaultSectionSize(24)
+        self.table.itemChanged.connect(self._schedule_save)
 
         controls = QHBoxLayout()
         add = QPushButton("Add new")
-        save = subtle_button("Save")
         move = subtle_button("Move")
         archive = subtle_button("Archive bought")
         email = subtle_button("Email")
         add.clicked.connect(self.add_row)
-        save.clicked.connect(self.save)
         move.clicked.connect(self.move)
         archive.clicked.connect(self.archive)
         email.clicked.connect(self.email_list)
-        for button in (add, save, move, archive, email):
+        for button in (add, move, archive, email):
             controls.addWidget(button)
         controls.addStretch(1)
 
@@ -47,9 +49,11 @@ class ShoppingPage(Compartment):
         self.refresh()
 
     def refresh(self) -> None:
+        self._save_timer.stop(); self._loading = True
         self.table.setRowCount(0)
         for row in self.context.shopping.list(include_archived=False):
             self.add_row([bool(row["bought"]), row["name"], row["quantity"], row["category"], row["list_type"]])
+        self._loading = False
 
     def add_row(self, values: list | None = None) -> None:
         values = values or [False, "", 1, "", "Grocery"]
@@ -70,9 +74,12 @@ class ShoppingPage(Compartment):
         list_type = QComboBox()
         list_type.addItems(["Grocery", "Amazon"])
         list_type.setCurrentText(values[4] if values[4] in ("Grocery", "Amazon") else "Grocery")
+        list_type.currentTextChanged.connect(self._schedule_save)
         self.table.setCellWidget(row_index, 4, list_type)
 
     def save(self) -> None:
+        if self._loading: return
+        self._save_timer.stop()
         rows = []
         for row in range(self.table.rowCount()):
             name = self._cell(row, 1)
@@ -89,7 +96,9 @@ class ShoppingPage(Compartment):
                 }
             )
         self.context.shopping.replace_all(rows)
-        self.refresh()
+
+    def _schedule_save(self, *_args) -> None:
+        if not self._loading: self._save_timer.start()
 
     def toggle(self) -> None:
         row = self.table.currentRow()

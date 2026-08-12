@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, Signal, QTimer
 from PySide6.QtWidgets import QAbstractItemView, QComboBox, QHBoxLayout, QPushButton, QTableWidget, QTableWidgetItem
 
 from personal_app.app import AppContext
@@ -16,22 +16,24 @@ class TasksPage(Compartment):
     def __init__(self, context: AppContext) -> None:
         super().__init__("To-Do List", "Spreadsheet-style task planning: edit cells, choose priority/status, then save.", "Tasks")
         self.context = context
+        self._loading = False
+        self._save_timer = QTimer(self); self._save_timer.setSingleShot(True); self._save_timer.setInterval(400)
+        self._save_timer.timeout.connect(self.save)
         self.table = QTableWidget(0, len(TASK_COLUMNS))
         self.table.setHorizontalHeaderLabels(TASK_COLUMNS)
         self.table.setAlternatingRowColors(True)
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.horizontalHeader().setStretchLastSection(True)
         self.table.verticalHeader().setVisible(False)
+        self.table.itemChanged.connect(self._schedule_save)
         controls = QHBoxLayout()
         add = QPushButton("Add new")
-        save = subtle_button("Save")
         archive_done = subtle_button("Archive done")
         remove = subtle_button("Remove")
         add.clicked.connect(self.add_row)
-        save.clicked.connect(self.save)
         archive_done.clicked.connect(self.archive_completed)
         remove.clicked.connect(self.delete_row)
-        for button in (add, save, archive_done, remove):
+        for button in (add, archive_done, remove):
             controls.addWidget(button)
         controls.addStretch(1)
         self.layout.addWidget(self.table, 1)
@@ -39,6 +41,7 @@ class TasksPage(Compartment):
         self.refresh()
 
     def refresh(self) -> None:
+        self._save_timer.stop(); self._loading = True
         self.table.setRowCount(0)
         for row in self.context.tasks.list("All"):
             if row["status"] == "Archived":
@@ -54,6 +57,7 @@ class TasksPage(Compartment):
                     row["status"],
                 ]
             )
+        self._loading = False
 
     def add_row(self, values: list | None = None) -> None:
         values = values or [False, "", "", "", "", "Medium", "Active"]
@@ -71,14 +75,18 @@ class TasksPage(Compartment):
         priority = QComboBox()
         priority.addItems(["Low", "Medium", "High"])
         priority.setCurrentText(values[5] or "Medium")
+        priority.currentTextChanged.connect(self._schedule_save)
         self.table.setCellWidget(row_index, 5, priority)
 
         status = QComboBox()
         status.addItems(["Active", "Completed", "Archived"])
         status.setCurrentText(values[6] or "Active")
+        status.currentTextChanged.connect(self._schedule_save)
         self.table.setCellWidget(row_index, 6, status)
 
     def save(self) -> None:
+        if self._loading: return
+        self._save_timer.stop()
         rows = []
         for row in range(self.table.rowCount()):
             name = self._cell(row, 1)
@@ -101,7 +109,9 @@ class TasksPage(Compartment):
             )
         rows.extend(self.context.tasks.list("Archived"))
         self.context.tasks.replace_all(rows)
-        self.refresh()
+
+    def _schedule_save(self, *_args) -> None:
+        if not self._loading: self._save_timer.start()
 
     def archive_completed(self) -> None:
         self.save()

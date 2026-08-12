@@ -2,7 +2,7 @@ from datetime import date, timedelta
 
 from pathlib import Path
 
-from PySide6.QtCore import Signal
+from PySide6.QtCore import Signal, QTimer
 from PySide6.QtWidgets import QComboBox, QHBoxLayout, QLabel, QPushButton, QTextEdit
 
 from personal_app.app import AppContext
@@ -127,26 +127,39 @@ class DashboardPage(Compartment):
 
 class BrainDumpPage(Compartment):
     items_added = Signal(dict)
+    transcript_ready = Signal(str)
+    transcription_failed = Signal(str)
     def __init__(self, context: AppContext) -> None:
         super().__init__("Inbox / Brain Dump", "Capture first; choose a destination or let keywords suggest one.", "Brain Dump Scanner")
         self.context = context
+        self.speech = SpeechService()
+        self.last_audio_path: Path | None = None
+        self._save_timer = QTimer(self)
+        self._save_timer.setSingleShot(True)
+        self._save_timer.setInterval(600)
+        self._save_timer.timeout.connect(self._autosave_draft)
         self.text = QTextEdit()
         self.text.setPlaceholderText("Messy thoughts, loose ideas, reminders...")
+        self.text.setPlainText(context.settings.get("brain_dump_draft") or "")
+        self.text.textChanged.connect(self._save_timer.start)
         route = QHBoxLayout()
         self.destination = QComboBox()
         self.destination.addItems(["Auto-sort", "Inbox", "Shopping", "Follow-Up", "Bills & Renewals", "Errands & Appointments", "Projects"])
-        save = subtle_button("Capture")
-        save.clicked.connect(self.save)
+        self.voice = subtle_button("🎙 Voice")
+        self.voice.clicked.connect(self._toggle_voice)
         route.addWidget(self.destination, 1)
-        route.addWidget(save)
+        route.addWidget(self.voice)
         self.items = QLabel()
         self.items.setWordWrap(True)
         self.layout.addWidget(self.text)
         self.layout.addLayout(route)
         self.layout.addWidget(self.items)
+        self.transcript_ready.connect(self._voice_ready)
+        self.transcription_failed.connect(self._voice_failed)
         self.refresh()
 
     def save(self) -> None:
+        self._save_timer.stop()
         body = self.text.toPlainText().strip()
         if body:
             destination = self.destination.currentText()
@@ -156,6 +169,41 @@ class BrainDumpPage(Compartment):
             self.text.clear()
             self.refresh()
             self.items_added.emit({destination: 1})
+
+    def _autosave_draft(self) -> None:
+        self.context.settings.set("brain_dump_draft", self.text.toPlainText())
+
+    def _toggle_voice(self) -> None:
+        if self.speech.is_recording:
+            try:
+                self.last_audio_path = self.speech.stop_recording()
+            except SpeechServiceError as exc:
+                self._voice_failed(str(exc)); return
+            self.voice.setText("🎙 Voice")
+            self.voice.setEnabled(False)
+            self.speech.transcribe_async(self.last_audio_path, self.transcript_ready.emit, self.transcription_failed.emit)
+            return
+        try:
+            self.speech.start_recording()
+            self.voice.setText("■ Stop")
+        except SpeechServiceError as exc:
+            self._voice_failed(str(exc))
+
+    def _voice_ready(self, text: str) -> None:
+        existing = self.text.toPlainText().strip()
+        self.text.setPlainText(" ".join(part for part in (existing, text.strip()) if part))
+        self.voice.setEnabled(True); self.voice.setText("🎙 Voice")
+        self._remove_audio()
+
+    def _voice_failed(self, _message: str) -> None:
+        self.voice.setEnabled(True); self.voice.setText("🎙 Voice")
+        self._remove_audio()
+
+    def _remove_audio(self) -> None:
+        if self.last_audio_path:
+            try: self.last_audio_path.unlink(missing_ok=True)
+            except OSError: pass
+            self.last_audio_path = None
 
     @staticmethod
     def _destination(body: str) -> str:

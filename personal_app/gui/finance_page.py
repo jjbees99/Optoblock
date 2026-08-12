@@ -5,7 +5,7 @@ from personal_app.app import AppContext
 from personal_app.gui.widgets import Compartment, danger_button, subtle_button
 
 
-COLUMNS = ["Date", "Type", "Category", "Description", "Amount", "Account"]
+COLUMNS = ["Date", "Type", "Details", "Amount"]
 
 
 class FinancePage(Compartment):
@@ -28,12 +28,10 @@ class FinancePage(Compartment):
         add = QPushButton("Add new")
         add_many = subtle_button("Add 10 rows")
         delete = danger_button("Delete row")
-        save = subtle_button("Save sheet")
         add.clicked.connect(self.add_row)
         add_many.clicked.connect(lambda: [self.add_row() for _ in range(10)])
         delete.clicked.connect(self.delete_row)
-        save.clicked.connect(self.save)
-        for button in (add, add_many, delete, save):
+        for button in (add, add_many, delete):
             controls.addWidget(button)
         controls.addStretch(1)
 
@@ -52,17 +50,15 @@ class FinancePage(Compartment):
                 [
                     row["entry_date"],
                     row["entry_type"],
-                    row["category"],
-                    row["description"],
+                    " · ".join(part for part in (row["description"], row["category"], row["account"]) if part),
                     f"{float(row['amount'] or 0):.2f}",
-                    row["account"],
                 ]
             )
         self.update_totals()
         self._loading = False
 
     def add_row(self, values: list[str] | None = None) -> None:
-        values = values or ["", "Expense", "", "", "0.00", ""]
+        values = values or ["", "Expense", "", "0.00"]
         row_index = self.table.rowCount()
         self.table.insertRow(row_index)
         for col, value in enumerate(values):
@@ -74,10 +70,10 @@ class FinancePage(Compartment):
                 combo.currentTextChanged.connect(self._schedule_save)
                 continue
             item = QTableWidgetItem(str(value))
-            if col == 4:
+            if col == 3:
                 item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
             self.table.setItem(row_index, col, item)
-        if values == ["", "Expense", "", "", "0.00", ""]: self._schedule_save()
+        if values == ["", "Expense", "", "0.00"]: self._schedule_save()
 
     def delete_row(self) -> None:
         row = self.table.currentRow()
@@ -97,10 +93,10 @@ class FinancePage(Compartment):
                 {
                     "entry_date": values[0],
                     "entry_type": values[1],
-                    "category": values[2],
-                    "description": values[3],
-                    "amount": values[4] or 0,
-                    "account": values[5],
+                    "category": "",
+                    "description": values[2],
+                    "amount": values[3] or 0,
+                    "account": "",
                 }
             )
         self.context.finance.replace_all(rows)

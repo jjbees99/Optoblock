@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date, datetime, timedelta
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, Signal, QTimer
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QAbstractItemView, QComboBox, QHBoxLayout, QLabel, QLineEdit, QPushButton, QTableWidget, QTableWidgetItem
 
@@ -33,6 +33,9 @@ class LifeAdminPage(Compartment):
         table_name, headers, combos = CONFIG[module_name]
         super().__init__(module_name, self._description(module_name), module_name)
         self.context, self.table_name, self.headers, self.combos = context, table_name, headers, combos
+        self._loading = False
+        self._save_timer = QTimer(self); self._save_timer.setSingleShot(True); self._save_timer.setInterval(400)
+        self._save_timer.timeout.connect(lambda: self.save(False))
         filters = QHBoxLayout()
         self.search = QLineEdit()
         self.search.setPlaceholderText("Search this module...")
@@ -45,8 +48,9 @@ class LifeAdminPage(Compartment):
         self.table.setAlternatingRowColors(True)
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.horizontalHeader().setStretchLastSection(True)
+        self.table.itemChanged.connect(self._schedule_save)
         controls = QHBoxLayout()
-        actions = [("Add new", self.add_row), ("Save", self.save)]
+        actions = [("Add new", self.add_row)]
         if self.table_name != "documents":
             actions.append((self._action_text(), self.mark_done))
         actions.append(("Archive selected", self.archive_selected))
@@ -73,6 +77,7 @@ class LifeAdminPage(Compartment):
         return "Mark paid" if self.table_name == "bills" else "Mark completed"
 
     def refresh(self, *_args) -> None:
+        self._save_timer.stop(); self._loading = True
         self.table.setRowCount(0)
         rows = self.context.life_admin.list(self.table_name, search=self.search.text() if hasattr(self, "search") else "")
         if self.table_name == "errands":
@@ -84,6 +89,7 @@ class LifeAdminPage(Compartment):
         for record in rows:
             values = [record[column] for column in self.context.life_admin.TABLES[self.table_name]]
             self.add_row(values, record["id"])
+        self._loading = False
 
     def add_row(self, values=None, item_id=None) -> None:
         values = list(values or ["" for _ in self.headers])
@@ -95,6 +101,7 @@ class LifeAdminPage(Compartment):
                 widget = QComboBox()
                 widget.addItems(self.combos[col])
                 widget.setCurrentText(str(value) if value else self.combos[col][0])
+                widget.currentTextChanged.connect(self._schedule_save)
                 self.table.setCellWidget(row, col, widget)
             else:
                 item = QTableWidgetItem(str(value))
@@ -103,7 +110,9 @@ class LifeAdminPage(Compartment):
                 self.table.setItem(row, col, item)
         self._highlight(row, values)
 
-    def save(self) -> None:
+    def save(self, refresh: bool = True) -> None:
+        if self._loading: return
+        self._save_timer.stop()
         columns = self.context.life_admin.TABLES[self.table_name]
         rows = []
         for row in range(self.table.rowCount()):
@@ -114,7 +123,10 @@ class LifeAdminPage(Compartment):
                 values[5] = "; ".join(part.strip() for part in values[5].split(";") if part.strip())
             rows.append(dict(zip(columns, values)))
         self.context.life_admin.replace_active(self.table_name, rows)
-        self.refresh()
+        if refresh: self.refresh()
+
+    def _schedule_save(self, *_args) -> None:
+        if not self._loading: self._save_timer.start()
 
     def mark_done(self) -> None:
         row = self.table.currentRow()

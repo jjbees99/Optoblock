@@ -1,4 +1,4 @@
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import QAbstractItemView, QComboBox, QHBoxLayout, QLabel, QPushButton, QTableWidget, QTableWidgetItem
 
 from personal_app.app import AppContext
@@ -14,6 +14,9 @@ class UnwindPage(Compartment):
     def __init__(self, context: AppContext) -> None:
         super().__init__("Unwind", "Spreadsheet reset list with category and time dropdowns for calm choices.", "Unwind")
         self.context = context
+        self._loading = False
+        self._save_timer = QTimer(self); self._save_timer.setSingleShot(True); self._save_timer.setInterval(400)
+        self._save_timer.timeout.connect(lambda: self.save(False))
         self.table = QTableWidget(0, len(UNWIND_COLUMNS))
         self.table.setHorizontalHeaderLabels(UNWIND_COLUMNS)
         self.table.setAlternatingRowColors(True)
@@ -21,6 +24,7 @@ class UnwindPage(Compartment):
         self.table.horizontalHeader().setStretchLastSection(True)
         self.table.verticalHeader().setVisible(False)
         self.table.verticalHeader().setDefaultSectionSize(24)
+        self.table.itemChanged.connect(self._schedule_save)
 
         self.category_filter = QComboBox()
         self.category_filter.addItems(["All categories", *CATEGORIES])
@@ -28,16 +32,14 @@ class UnwindPage(Compartment):
 
         controls = QHBoxLayout()
         add = QPushButton("Add new")
-        save = subtle_button("Save")
         done = subtle_button("Done today")
         suggest = subtle_button("Suggest")
         reset = subtle_button("Reset")
         add.clicked.connect(self.add_row)
-        save.clicked.connect(self.save)
         done.clicked.connect(self.toggle)
         suggest.clicked.connect(self.suggest)
         reset.clicked.connect(self.reset)
-        for button in (add, save, done, suggest, reset):
+        for button in (add, done, suggest, reset):
             controls.addWidget(button)
         controls.addStretch(1)
 
@@ -50,12 +52,14 @@ class UnwindPage(Compartment):
         self.refresh()
 
     def refresh(self) -> None:
+        self._save_timer.stop(); self._loading = True
         self.table.setRowCount(0)
         active_filter = self.category_filter.currentText() if hasattr(self, "category_filter") else "All categories"
         for row in self.context.unwind.list():
             if active_filter != "All categories" and row["activity_type"] != active_filter:
                 continue
             self.add_row([bool(row["done_today"]), row["name"], row["activity_type"], row["estimated_time"]])
+        self._loading = False
 
     def add_row(self, values: list | None = None) -> None:
         values = values or [False, "", "recovery", "15 min"]
@@ -71,14 +75,18 @@ class UnwindPage(Compartment):
         category = QComboBox()
         category.addItems(CATEGORIES)
         category.setCurrentText(values[2] if values[2] in CATEGORIES else "recovery")
+        category.currentTextChanged.connect(self._schedule_save)
         self.table.setCellWidget(row_index, 2, category)
 
         time = QComboBox()
         time.addItems(TIMES)
         time.setCurrentText(values[3] if values[3] in TIMES else "15 min")
+        time.currentTextChanged.connect(self._schedule_save)
         self.table.setCellWidget(row_index, 3, time)
 
-    def save(self) -> None:
+    def save(self, refresh: bool = True) -> None:
+        if self._loading: return
+        self._save_timer.stop()
         rows = []
         active_filter = self.category_filter.currentText()
         for row in range(self.table.rowCount()):
@@ -96,7 +104,10 @@ class UnwindPage(Compartment):
         if active_filter != "All categories":
             rows.extend(row for row in self.context.unwind.list() if row["activity_type"] != active_filter)
         self.context.unwind.replace_all(rows)
-        self.refresh()
+        if refresh: self.refresh()
+
+    def _schedule_save(self, *_args) -> None:
+        if not self._loading: self._save_timer.start()
 
     def toggle(self) -> None:
         row = self.table.currentRow()
