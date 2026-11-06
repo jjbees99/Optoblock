@@ -1,110 +1,49 @@
-# Optoblock
+﻿# Optoblock
 
-Optoblock is a private, local-first Windows productivity app for tasks, projects, notes, journaling, shopping, recipes, finances, routines, focus sessions, and quick brain dumps. It is built with Python and PySide6 and stores your information on your own computer.
+Optoblock is a local-first Windows app for organising tasks, projects, notes, shopping, your day and more. Your data stays on your computer.
 
-## Download for Windows
+## Download and start (Windows)
 
-### [Download Optoblock-Windows.zip](https://github.com/jjbees99/Optoblock/releases/latest/download/Optoblock-Windows.zip)
+1. **[Download Optoblock for Windows](https://github.com/jjbees99/Optoblock/releases/latest/download/Optoblock-Windows.zip)**. If the download does not start, open the [latest release](https://github.com/jjbees99/Optoblock/releases/latest) and select **Optoblock-Windows.zip** under **Assets** (not “Source code”).
+2. Open your Downloads folder, right-click the ZIP file and choose **Extract All**, then **Extract**.
+3. Open the extracted **Optoblock** folder and double-click **Optoblock.exe**.
+4. Keep the **_internal** folder alongside the EXE. You can move the whole extracted Optoblock folder wherever you like, and create a shortcut to the EXE.
 
-You do **not** need Python to use the downloadable app.
+No Python installation or command line is needed. The app is for Windows 10 and 11. Windows SmartScreen may warn that the app is unsigned; if you trust this download, choose **More info**, then **Run anyway**.
 
-1. Download `Optoblock-Windows.zip` using the link above.
-2. Right-click the downloaded ZIP and select **Extract All**.
-3. Open the extracted `Optoblock` folder.
-4. Double-click **`Optoblock.exe`**.
-
-Keep the `_internal` folder beside `Optoblock.exe`; the application needs both. Windows may show a SmartScreen warning because the app is not code-signed. If you trust this repository, select **More info**, then **Run anyway**.
-
-If the direct download link is unavailable, open the [latest release page](https://github.com/jjbees99/Optoblock/releases/latest) and download `Optoblock-Windows.zip` from **Assets**.
-
-## Highlights
-
-- Customisable 4 × 3 dashboard with draggable and resizable modules
-- Smooth page fade-and-slide transitions
-- Tasks with priorities, due dates, filters, completion, archive, and restore
-- Projects with ideas, next actions, progress states, and task conversion
-- Autosaving notes and daily journal entries with voice, writing, and drawing tools
-- Grocery and general/Amazon shopping lists
-- Recipes with one-click ingredient transfer to the grocery list
-- Focus timer, voice brain dump, and unwind routines
-- Spreadsheet-style finance tracking
-- Bills, documents, errands, follow-ups, travel, and home administration pages
-- Festival-inspired Cream, Ink, Peach, and Lilac colour schemes
-- English and German workspace navigation, startup-module selection, and archive view
-- Custom Optoblock cube branding across the sidebar and Windows application icon
-- Local SQLite storage plus readable JSON snapshots and backup/restore
+To update, download and extract the latest release the same way, then use the new folder. Your existing data is stored separately and should remain available.
 
 ## Your data
 
-Optoblock stores its working data in `%USERPROFILE%\.optoblock` rather than inside the application folder. The main database is `optoblock.sqlite3`; a readable copy is maintained at `data\optoblock-data.json`, and notes are also written to `data\notes` as UTF-8 text files.
+Optoblock stores its database and settings in `%USERPROFILE%\.optoblock`. To find it, paste that path into File Explorer's address bar. Back up this folder regularly and copy it to the same location on a new computer. The app also offers a JSON export and restore option.
 
-Use Optoblock's JSON export before replacing a computer or making major changes. Installing a newer release does not intentionally remove your existing data.
+## Phone access (optional)
 
-## Run from source
+You can access selected features from your phone while Optoblock is running on your PC. See [Phone access setup](PHONE_ACCESS_SETUP.md) for the steps. Phone access is optional and does not require opening a public firewall port.
 
-Requirements:
+## Run from source (developers)
 
-- Windows 10 or 11
-- Python 3.11 or newer
-- A microphone for voice features
-- Internet access for online speech recognition
-
-Clone the repository, then run:
-
-```powershell
-python -m venv .venv
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-.\.venv\Scripts\Activate.ps1
-python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
-python main.py
-```
-
-Alternatively, the included installer performs the environment setup:
+Install [Python](https://www.python.org/downloads/windows/) 3.11 or newer and select **Add Python to PATH** during installation. Download the repository with **Code → Download ZIP** and extract it, or clone it with Git. Open PowerShell in the extracted project folder and run:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\install.ps1
+.\.venv\Scripts\python.exe main.py
 ```
 
-## Build the Windows app
+A microphone and internet connection are needed for online voice transcription. The app's other features do not require voice input.
 
-With the virtual environment active:
+To run tests:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\build_windows.ps1
+$env:QT_QPA_PLATFORM = 'offscreen'
+.\.venv\Scripts\python.exe -m unittest discover -s tests -v
 ```
 
-The executable is created at `dist\Optoblock\Optoblock.exe`. Distribute the entire `Optoblock` folder or a ZIP containing it—not the EXE by itself.
-
-Tagged versions are built automatically by the GitHub Actions release workflow. The resulting `Optoblock-Windows.zip` is attached to the matching GitHub Release.
-
-## Project layout
-
-```text
-Optoblock/
-├── main.py                 Application entry point
-├── personal_app/
-│   ├── assets/             Icons and packaged assets
-│   ├── data/               SQLite schema and data models
-│   ├── gui/                PySide6 windows, pages, and styling
-│   └── logic/              Feature and storage managers
-├── tests/                  Automated tests
-├── requirements.txt        Runtime dependencies
-├── install.ps1             Source setup helper
-├── build_windows.ps1       Windows packaging helper
-└── Optoblock.spec          PyInstaller configuration
-```
+To build the Windows app from source, activate the virtual environment and run `powershell -NoProfile -ExecutionPolicy Bypass -File .\build_windows.ps1`. The complete app is created in `dist\Optoblock`; distribute the whole folder, not just the EXE. Tagged versions are built and published by GitHub Actions.
 
 ## Troubleshooting
 
-- If `python` is not recognised, reinstall Python and select **Add Python to PATH**.
-- If microphone input fails, allow desktop microphone access under Windows **Settings → Privacy & security → Microphone**.
-- Voice transcription uses Google's recognition service and requires an internet connection.
-- If SmartScreen appears, use **More info → Run anyway** only if you trust the downloaded release.
-- Keep a copy of `%USERPROFILE%\.optoblock` before restoring or replacing data.
-
-## Tests
-
-```powershell
-python -m unittest discover -s tests -v
-```
+- **The app does not open from the ZIP:** extract all files first, and keep `_internal` next to `Optoblock.exe`.
+- **SmartScreen appears:** the app is unsigned. If you trust the release, select **More info → Run anyway**.
+- **Microphone input fails:** allow desktop microphone access in Windows **Settings → Privacy & security → Microphone**. Online transcription needs an internet connection.
+- **Python is not recognised:** reinstall Python and enable **Add Python to PATH**. Python is only needed when running from source.

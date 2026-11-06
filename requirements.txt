@@ -1,3 +1,7 @@
 PySide6>=6.7
 sounddevice>=0.5
 SpeechRecognition>=3.10
+fastapi>=0.115
+uvicorn>=0.30
+httpx2>=0.0.1
+websockets>=13.0

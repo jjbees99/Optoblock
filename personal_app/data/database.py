@@ -2,6 +2,11 @@ import base64
 import json
 import sqlite3
 import os
+import re
+import shutil
+import threading
+from contextlib import contextmanager
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -16,18 +21,26 @@ DATA_DIR = APP_DIR / "data"
 class Database:
     def __init__(self, path: Path = DB_PATH) -> None:
         self.path = path
+        self._write_lock = threading.RLock()
+        self._listeners: list = []
         self.path.parent.mkdir(parents=True, exist_ok=True)
         if self.path == DB_PATH and not self.path.exists() and LEGACY_DB_PATH.exists():
             self.path.write_bytes(LEGACY_DB_PATH.read_bytes())
 
-    def connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.path)
+    @contextmanager
+    def connect(self):
+        conn = sqlite3.connect(self.path, timeout=5.0)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON")
-        return conn
+        conn.execute("PRAGMA busy_timeout = 5000")
+        try:
+            yield conn
+        finally:
+            conn.close()
 
     def initialize(self) -> None:
-        with self.connect() as conn:
+        with self._write_lock, self.connect() as conn:
+            conn.execute("PRAGMA journal_mode = WAL")
             conn.executescript(
                 """
                 CREATE TABLE IF NOT EXISTS tasks (
@@ -140,9 +153,48 @@ class Database:
                     updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
                     created_at TEXT DEFAULT CURRENT_TIMESTAMP
                 );
+                CREATE TABLE IF NOT EXISTS planner_blocks (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    plan_date TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    start_minute INTEGER NOT NULL,
+                    duration_minutes INTEGER NOT NULL DEFAULT 30,
+                    notes TEXT DEFAULT '',
+                    colour TEXT DEFAULT '#7dd3fc',
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+                );
+                CREATE INDEX IF NOT EXISTS idx_planner_blocks_date ON planner_blocks(plan_date, start_minute);
                 """
             )
             self._ensure_column(conn, "projects", "progress_colour", "TEXT DEFAULT 'Red'")
+
+    def add_listener(self, listener) -> None:
+        if listener not in self._listeners:
+            self._listeners.append(listener)
+
+    def remove_listener(self, listener) -> None:
+        if listener in self._listeners:
+            self._listeners.remove(listener)
+
+    def checkpoint(self) -> None:
+        """Release WAL files before shutdown or temporary-database cleanup."""
+        with self._write_lock, self.connect() as conn:
+            conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+
+    def notify(self, domain: str, details: dict | None = None) -> None:
+        for listener in tuple(self._listeners):
+            try:
+                listener(domain, details or {})
+            except Exception:
+                pass
+
+    @staticmethod
+    def _domain_for_query(query: str) -> str:
+        match = re.search(r"(?:into|update|from)\s+([a-z_]+)", query, re.I)
+        table = match.group(1) if match else "data"
+        return {"shopping_items": "shopping", "planner_blocks": "planner", "brain_dump": "brain_dump",
+                "finance_entries": "finance", "journal_entries": "journal", "unwind_items": "unwind",
+                "follow_ups": "follow_up", "travel_plans": "travel", "home_items": "home"}.get(table, table)
 
     def _ensure_column(self, conn: sqlite3.Connection, table: str, column: str, definition: str) -> None:
         columns = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()}
@@ -158,35 +210,40 @@ class Database:
         return rows[0] if rows else None
 
     def execute(self, query: str, params: Iterable[Any] = ()) -> int:
-        with self.connect() as conn:
-            cur = conn.execute(query, tuple(params))
-            conn.commit()
-            row_id = int(cur.lastrowid)
-        self.write_readable_snapshot()
+        with self._write_lock:
+            with self.connect() as conn:
+                cur = conn.execute(query, tuple(params))
+                conn.commit()
+                row_id = int(cur.lastrowid)
+            self.write_readable_snapshot()
+        self.notify(self._domain_for_query(query))
         return row_id
 
     def execute_many(self, query: str, rows: Iterable[Iterable[Any]]) -> None:
-        with self.connect() as conn:
-            conn.executemany(query, rows)
-            conn.commit()
-        self.write_readable_snapshot()
+        with self._write_lock:
+            with self.connect() as conn:
+                conn.executemany(query, rows)
+                conn.commit()
+            self.write_readable_snapshot()
+        self.notify(self._domain_for_query(query))
 
     def write_readable_snapshot(self) -> None:
         """Atomically maintain a human-readable companion backup to SQLite."""
-        DATA_DIR.mkdir(parents=True, exist_ok=True)
-        target = DATA_DIR / "optoblock-data.json"
-        temporary = target.with_suffix(".tmp")
-        tables = [row["name"] for row in self.all(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
-        )]
-        payload = {table: self.all(f"SELECT * FROM {table}") for table in tables}
-        for rows in payload.values():
-            for row in rows:
-                for key, value in row.items():
-                    if isinstance(value, bytes):
-                        row[key] = {"__bytes__": base64.b64encode(value).decode("ascii")}
-        temporary.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
-        os.replace(temporary, target)
+        with self._write_lock:
+            DATA_DIR.mkdir(parents=True, exist_ok=True)
+            target = DATA_DIR / "optoblock-data.json"
+            temporary = target.with_suffix(".tmp")
+            tables = [row["name"] for row in self.all(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
+            )]
+            payload = {table: self.all(f"SELECT * FROM {table}") for table in tables}
+            for rows in payload.values():
+                for row in rows:
+                    for key, value in row.items():
+                        if isinstance(value, bytes):
+                            row[key] = {"__bytes__": base64.b64encode(value).decode("ascii")}
+            temporary.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+            os.replace(temporary, target)
 
     def export_json(self, target: Path) -> None:
         tables = [row["name"] for row in self.all(

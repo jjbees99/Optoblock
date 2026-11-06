@@ -7,6 +7,7 @@ from PySide6.QtWidgets import QAbstractItemView, QComboBox, QHBoxLayout, QLabel,
 
 from personal_app.app import AppContext
 from personal_app.gui.widgets import Compartment, subtle_button
+from personal_app.gui.column_preferences import configure_columns
 
 
 SHOPPING_COLUMNS = ["Bought", "Item", "Quantity", "Category", "List"]
@@ -27,6 +28,7 @@ class ShoppingPage(Compartment):
         self.table.verticalHeader().setVisible(False)
         self.table.verticalHeader().setDefaultSectionSize(24)
         self.table.itemChanged.connect(self._schedule_save)
+        configure_columns(self.table, context, "Shopping", SHOPPING_COLUMNS)
 
         controls = QHBoxLayout()
         add = QPushButton("Add new")
@@ -52,17 +54,18 @@ class ShoppingPage(Compartment):
         self._save_timer.stop(); self._loading = True
         self.table.setRowCount(0)
         for row in self.context.shopping.list(include_archived=False):
-            self.add_row([bool(row["bought"]), row["name"], row["quantity"], row["category"], row["list_type"]])
+            self.add_row([bool(row["bought"]), row["name"], row["quantity"], row["category"], row["list_type"], row["id"]])
         self._loading = False
 
     def add_row(self, values: list | None = None) -> None:
-        values = values or [False, "", 1, "", "Grocery"]
+        values = values or [False, "", 1, "", "Grocery", None]
         row_index = self.table.rowCount()
         self.table.insertRow(row_index)
 
         bought = QTableWidgetItem("")
         bought.setFlags(bought.flags() | Qt.ItemIsUserCheckable)
         bought.setCheckState(Qt.Checked if values[0] else Qt.Unchecked)
+        bought.setData(Qt.UserRole, values[5] if len(values) > 5 else None)
         self.table.setItem(row_index, 0, bought)
 
         self.table.setItem(row_index, 1, QTableWidgetItem(str(values[1])))
@@ -80,13 +83,11 @@ class ShoppingPage(Compartment):
     def save(self) -> None:
         if self._loading: return
         self._save_timer.stop()
-        rows = []
         for row in range(self.table.rowCount()):
             name = self._cell(row, 1)
             if not name:
                 continue
-            rows.append(
-                {
+            values = {
                     "bought": int(self.table.item(row, 0).checkState() == Qt.Checked),
                     "name": name,
                     "quantity": self._quantity(row),
@@ -94,8 +95,15 @@ class ShoppingPage(Compartment):
                     "list_type": self._combo(row, 4) or "Grocery",
                     "archived": 0,
                 }
-            )
-        self.context.shopping.replace_all(rows)
+            item_id = self.table.item(row, 0).data(Qt.UserRole)
+            if item_id:
+                fields = {k: values[k] for k in ("name","quantity","category","list_type","bought")}
+                sql = ", ".join(f"{k}=?" for k in fields)
+                self.context.db.execute(f"UPDATE shopping_items SET {sql} WHERE id=?", (*fields.values(), item_id))
+            else:
+                item_id = self.context.shopping.add(values["name"], values["quantity"], values["category"], values["list_type"])
+                self.table.item(row, 0).setData(Qt.UserRole, item_id)
+                if values["bought"]: self.context.shopping.set_bought(item_id, True)
 
     def _schedule_save(self, *_args) -> None:
         if not self._loading: self._save_timer.start()
@@ -128,12 +136,12 @@ class ShoppingPage(Compartment):
     def delete_row(self) -> None:
         row = self.table.currentRow()
         if row >= 0:
+            item_id = self.table.item(row, 0).data(Qt.UserRole)
+            if item_id: self.context.shopping.delete(int(item_id))
             self.table.removeRow(row)
-            self.save()
 
     def email_list(self) -> None:
         self.save()
-        recipient = "jakebees00@gmail.com"
         subject_text = "Optoblock shopping list"
         body_text = self.context.shopping.email_body()
         QGuiApplication.clipboard().setText(body_text)
@@ -142,7 +150,7 @@ class ShoppingPage(Compartment):
         backup_path.write_text(body_text, encoding="utf-8")
         subject = quote(subject_text)
         body = quote(body_text)
-        url = QUrl(f"https://mail.google.com/mail/?view=cm&fs=1&to={recipient}&su={subject}&body={body}")
+        url = QUrl(f"https://mail.google.com/mail/?view=cm&fs=1&su={subject}&body={body}")
         opened = QDesktopServices.openUrl(url)
         if opened:
             self.notice.setText("Opened Gmail in your browser. The list is also copied to clipboard and saved in Documents.")

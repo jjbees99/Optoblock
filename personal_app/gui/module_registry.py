@@ -17,6 +17,7 @@ from personal_app.gui.shopping_page import ShoppingPage
 from personal_app.gui.tasks_page import TasksPage
 from personal_app.gui.unwind_page import UnwindPage
 from personal_app.gui.voice_brain_dump_page import VoiceBrainDumpPage
+from personal_app.gui.day_planner_page import DayPlannerPage
 
 
 MODULE_TITLES = {
@@ -40,6 +41,7 @@ MODULE_TITLES = {
     "Journal": "Journal",
     "Notes": "Notes",
     "Settings": "Settings",
+    "Day Planner": "Day Planner",
 }
 
 MODULE_OUTLINES = {
@@ -63,6 +65,7 @@ MODULE_OUTLINES = {
     "Journal": "#f9a8d4",
     "Notes": "#fde68a",
     "Settings": "#67e8f9",
+    "Day Planner": "#7dd3fc",
 }
 
 
@@ -88,5 +91,6 @@ def module_factory(context: AppContext, name: str, theme_changed=None) -> Callab
         "Journal": lambda: JournalPage(context),
         "Notes": lambda: NotesPage(context),
         "Settings": lambda: SettingsPage(context, theme_changed),
+        "Day Planner": lambda: DayPlannerPage(context),
     }
     return factories[name]

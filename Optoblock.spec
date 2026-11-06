@@ -1,12 +1,18 @@
 # -*- mode: python ; coding: utf-8 -*-
 
+from PyInstaller.utils.hooks import collect_submodules
+
+remote_hiddenimports = []
+for package in ('fastapi', 'starlette', 'pydantic', 'uvicorn', 'anyio', 'websockets'):
+    remote_hiddenimports += collect_submodules(package)
+
 
 a = Analysis(
     ['main.py'],
     pathex=[],
     binaries=[],
-    datas=[('personal_app/assets', 'personal_app/assets')],
-    hiddenimports=[],
+    datas=[('personal_app/assets', 'personal_app/assets'), ('personal_app/remote/static', 'personal_app/remote/static')],
+    hiddenimports=remote_hiddenimports,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

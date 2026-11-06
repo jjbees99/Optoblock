@@ -8,6 +8,7 @@ from PySide6.QtWidgets import QAbstractItemView, QComboBox, QHBoxLayout, QLabel,
 
 from personal_app.app import AppContext
 from personal_app.gui.widgets import Compartment, subtle_button
+from personal_app.gui.column_preferences import configure_columns
 
 
 CONFIG = {
@@ -49,6 +50,7 @@ class LifeAdminPage(Compartment):
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.horizontalHeader().setStretchLastSection(True)
         self.table.itemChanged.connect(self._schedule_save)
+        configure_columns(self.table, context, module_name, headers)
         controls = QHBoxLayout()
         actions = [("Add new", self.add_row)]
         if self.table_name != "documents":

@@ -11,6 +11,7 @@ DEFAULTS = {
     "compact_mode": "Comfortable",
     "workspace_theme": "Cream",
     "language": "English",
+    "phone_access_enabled": "true",
 }
 
 

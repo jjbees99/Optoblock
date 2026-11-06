@@ -6,6 +6,7 @@ from personal_app.logic.finance_manager import FinanceManager
 from personal_app.logic.life_admin_manager import LifeAdminManager
 from personal_app.logic.journal_manager import JournalManager
 from personal_app.logic.notes_manager import NotesManager
+from personal_app.logic.day_planner_manager import DayPlannerManager
 from personal_app.logic.project_manager import ProjectManager
 from personal_app.logic.recipe_manager import RecipeManager
 from personal_app.logic.settings_manager import SettingsManager
@@ -13,6 +14,7 @@ from personal_app.logic.shopping_manager import ShoppingManager
 from personal_app.logic.storage_manager import StorageManager
 from personal_app.logic.task_manager import TaskManager
 from personal_app.logic.unwind_manager import UnwindManager
+from personal_app.services.optoblock_service import OptoblockService
 
 
 @dataclass
@@ -30,6 +32,8 @@ class AppContext:
     life_admin: LifeAdminManager
     journal: JournalManager
     notes: NotesManager
+    day_planner: DayPlannerManager
+    service: OptoblockService | None = None
 
     @classmethod
     def create(cls) -> "AppContext":
@@ -47,6 +51,10 @@ class AppContext:
         life_admin = LifeAdminManager(db)
         journal = JournalManager(db)
         notes = NotesManager(db)
+        day_planner = DayPlannerManager(db)
+        day_planner.ensure_varied_colours()
         unwind.ensure_defaults()
         db.write_readable_snapshot()
-        return cls(db, settings, tasks, projects, shopping, recipes, unwind, brain_dump, finance, storage, life_admin, journal, notes)
+        context = cls(db, settings, tasks, projects, shopping, recipes, unwind, brain_dump, finance, storage, life_admin, journal, notes, day_planner)
+        context.service = OptoblockService(context)
+        return context

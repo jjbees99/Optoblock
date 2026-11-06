@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import QRect, QTimer
-from PySide6.QtWidgets import QCheckBox, QFrame, QHBoxLayout, QLabel, QMenu, QMessageBox, QToolButton, QVBoxLayout, QWidget, QWidgetAction
+from PySide6.QtWidgets import QCheckBox, QComboBox, QFrame, QHBoxLayout, QInputDialog, QLabel, QMenu, QMessageBox, QToolButton, QVBoxLayout, QWidget, QWidgetAction
 
 from personal_app.app import AppContext
 from personal_app.data.models import DashboardModule
@@ -13,9 +13,10 @@ from personal_app.logic.dashboard_storage import DashboardStorage
 COLUMNS, ROWS = 4, 3
 MARGIN, GAP = 10, 10
 BOARD_MODULES = [
-    "Dashboard", "Tasks", "Projects", "Shopping", "Brain Dump Scanner",
+    "Dashboard", "Day Planner", "Tasks", "Projects", "Shopping", "Brain Dump Scanner",
     "Bills & Renewals", "Documents", "Errands & Appointments", "Follow-Up",
-    "Travel & Plans", "Home / Flat / Living", "Archive", "Finance", "Unwind",
+    "Travel & Plans", "Home / Flat / Living", "Journal", "Notes", "Archive", "Finance",
+    "Recipes", "Focus Timer", "Voice Brain Dump", "Unwind",
 ]
 DEFAULT_LAYOUT = [
     ("Tasks", 0, 0, 2, 2), ("Dashboard", 2, 0, 2, 1),
@@ -33,10 +34,12 @@ class DashboardBoard(QWidget):
         self.context = context
         self.destination_changed = destination_changed
         self.storage = DashboardStorage()
-        active, profiles = self.storage.load_profiles()
-        saved = profiles.get("Workspace 4x3") or []
-        candidate = DashboardLayout(saved, COLUMNS, ROWS)
-        self.dashboard = candidate if saved and candidate.is_valid() else DashboardLayout(self._defaults(), COLUMNS, ROWS)
+        active, self.profiles = self.storage.load_profiles()
+        if not self.profiles:
+            self.profiles = {"My Dashboard": self._defaults()}
+            active = "My Dashboard"
+        self.active_profile = active if active in self.profiles else next(iter(self.profiles))
+        self.dashboard = self._profile_layout(self.active_profile)
         self.widgets_by_module: dict[str, QWidget] = {}
         self.module_checks: dict[str, QCheckBox] = {}
 
@@ -50,8 +53,25 @@ class DashboardBoard(QWidget):
         titles.addWidget(title)
         header.addLayout(titles)
         header.addStretch(1)
+        self.profile_picker = QComboBox()
+        self.profile_picker.setToolTip("Choose a dashboard")
+        self.profile_picker.setMinimumWidth(170)
+        self._refresh_profile_picker()
+        self.profile_picker.currentTextChanged.connect(self._switch_profile)
+        header.addWidget(self.profile_picker)
+
+        dashboard_actions = QToolButton()
+        dashboard_actions.setText("Dashboards")
+        dashboard_actions.setPopupMode(QToolButton.InstantPopup)
+        dashboard_menu = QMenu(dashboard_actions)
+        dashboard_menu.addAction("New dashboard…", self._new_profile)
+        dashboard_menu.addAction("Rename dashboard…", self._rename_profile)
+        dashboard_menu.addAction("Delete dashboard…", self._delete_profile)
+        dashboard_actions.setMenu(dashboard_menu)
+        header.addWidget(dashboard_actions)
+
         picker = QToolButton()
-        picker.setText("Customize")
+        picker.setText("Modules")
         picker.setPopupMode(QToolButton.InstantPopup)
         menu = QMenu(picker)
         active_ids = {module.id for module in self.dashboard.modules}
@@ -81,6 +101,85 @@ class DashboardBoard(QWidget):
 
     def _defaults(self) -> list[DashboardModule]:
         return [DashboardModule(name, MODULE_TITLES[name], name, x, y, w, h) for name, x, y, w, h in DEFAULT_LAYOUT]
+
+    @staticmethod
+    def _copy_modules(modules: list[DashboardModule]) -> list[DashboardModule]:
+        return [DashboardModule.from_dict(module.to_dict()) for module in modules]
+
+    def _profile_layout(self, name: str) -> DashboardLayout:
+        saved = [module for module in self._copy_modules(self.profiles.get(name, [])) if module.type in MODULE_TITLES]
+        candidate = DashboardLayout(saved, COLUMNS, ROWS)
+        return candidate if candidate.is_valid() else DashboardLayout(self._defaults(), COLUMNS, ROWS)
+
+    def _refresh_profile_picker(self) -> None:
+        self.profile_picker.blockSignals(True)
+        self.profile_picker.clear()
+        self.profile_picker.addItems(self.profiles.keys())
+        self.profile_picker.setCurrentText(self.active_profile)
+        self.profile_picker.blockSignals(False)
+
+    def _sync_module_checks(self) -> None:
+        active_ids = {module.id for module in self.dashboard.modules}
+        for name, check in self.module_checks.items():
+            check.blockSignals(True)
+            check.setChecked(name in active_ids)
+            check.blockSignals(False)
+
+    def _switch_profile(self, name: str) -> None:
+        if not name or name == self.active_profile or name not in self.profiles:
+            return
+        self._save_project()
+        self._persist()
+        self.active_profile = name
+        self.dashboard = self._profile_layout(name)
+        self._sync_module_checks()
+        self.rebuild()
+
+    def _new_profile(self) -> None:
+        name, ok = QInputDialog.getText(self, "New dashboard", "Dashboard name")
+        name = name.strip()
+        if not ok or not name:
+            return
+        if any(existing.casefold() == name.casefold() for existing in self.profiles):
+            QMessageBox.information(self, "Dashboards", "A dashboard with that name already exists.")
+            return
+        self._persist()
+        self.profiles[name] = self._copy_modules(self.dashboard.modules)
+        self.active_profile = name
+        self.dashboard = self._profile_layout(name)
+        self._refresh_profile_picker()
+        self._sync_module_checks()
+        self.rebuild()
+
+    def _rename_profile(self) -> None:
+        name, ok = QInputDialog.getText(self, "Rename dashboard", "Dashboard name", text=self.active_profile)
+        name = name.strip()
+        if not ok or not name or name == self.active_profile:
+            return
+        if any(existing.casefold() == name.casefold() for existing in self.profiles):
+            QMessageBox.information(self, "Dashboards", "A dashboard with that name already exists.")
+            return
+        self._persist()
+        renamed = {}
+        for existing, modules in self.profiles.items():
+            renamed[name if existing == self.active_profile else existing] = modules
+        self.profiles = renamed
+        self.active_profile = name
+        self._refresh_profile_picker()
+        self._persist()
+
+    def _delete_profile(self) -> None:
+        if len(self.profiles) == 1:
+            QMessageBox.information(self, "Dashboards", "Keep at least one dashboard.")
+            return
+        if QMessageBox.question(self, "Delete dashboard", f'Delete "{self.active_profile}"?') != QMessageBox.Yes:
+            return
+        del self.profiles[self.active_profile]
+        self.active_profile = next(iter(self.profiles))
+        self.dashboard = self._profile_layout(self.active_profile)
+        self._refresh_profile_picker()
+        self._sync_module_checks()
+        self.rebuild()
 
     def rebuild(self) -> None:
         self._save_project()
@@ -155,9 +254,8 @@ class DashboardBoard(QWidget):
         return (max(1, (self.canvas.width() - 2 * MARGIN - 3 * GAP) // COLUMNS), max(1, (self.canvas.height() - 2 * MARGIN - 2 * GAP) // ROWS))
 
     def _persist(self) -> None:
-        active, profiles = self.storage.load_profiles()
-        profiles["Workspace 4x3"] = self.dashboard.modules
-        self.storage.save_profiles(active, profiles)
+        self.profiles[self.active_profile] = self._copy_modules(self.dashboard.modules)
+        self.storage.save_profiles(self.active_profile, self.profiles)
 
     def _save_project(self) -> None:
         widget = self.widgets_by_module.get("Projects")

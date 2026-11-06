@@ -1,4 +1,4 @@
-from PySide6.QtWidgets import QFileDialog, QComboBox, QFormLayout, QLabel, QLineEdit, QPushButton
+from PySide6.QtWidgets import QFileDialog, QCheckBox, QComboBox, QFormLayout, QLabel, QLineEdit, QPushButton
 
 from personal_app.app import AppContext
 from personal_app.gui.widgets import Compartment
@@ -35,6 +35,13 @@ class SettingsPage(Compartment):
         form.addRow("Table colour", self.table_color)
         form.addRow("Density", self.density)
         form.addRow("Backup location", self.backup)
+        self.phone_access = QCheckBox("Start the localhost phone server with Optoblock")
+        self.phone_access.setChecked(context.settings.get("phone_access_enabled", "true") == "true")
+        self.phone_access.toggled.connect(self.save)
+        form.addRow("Phone Access", self.phone_access)
+        status = getattr(context, "phone_server_status", "Status available after normal application startup")
+        self.phone_status = QLabel(f"Local server: {status}\nAddress: http://127.0.0.1:8765\nRestart Optoblock after changing this setting.")
+        form.addRow("Server", self.phone_status)
         export_btn = QPushButton("Export JSON")
         import_btn = QPushButton("Import JSON")
         export_btn.clicked.connect(self.export_json)
@@ -52,6 +59,7 @@ class SettingsPage(Compartment):
         self.context.settings.set("table_color", self.table_color.text().strip() or "#1f2a2e")
         self.context.settings.set("compact_mode", self.density.currentText())
         self.context.settings.set("backup_location", self.backup.text())
+        self.context.settings.set("phone_access_enabled", "true" if self.phone_access.isChecked() else "false")
         if self.theme_changed:
             self.theme_changed()
 

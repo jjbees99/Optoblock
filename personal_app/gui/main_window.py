@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import threading
 from pathlib import Path
 
-from PySide6.QtCore import QEasingCurve, QParallelAnimationGroup, QPoint, QPropertyAnimation, Qt, QTimer
+from PySide6.QtCore import QEasingCurve, QObject, QParallelAnimationGroup, QPoint, QPropertyAnimation, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QIcon, QPixmap
 from PySide6.QtWidgets import QFrame, QGraphicsOpacityEffect, QHBoxLayout, QLabel, QListWidget, QListWidgetItem, QMainWindow, QMessageBox, QPushButton, QStackedWidget, QVBoxLayout, QWidget
 
@@ -13,7 +14,7 @@ from personal_app.gui.styles import festival_stylesheet
 
 
 PRIMARY_MODULES = [
-    "Dashboard", "Tasks", "Projects", "Shopping", "Brain Dump Scanner",
+    "Dashboard", "Day Planner", "Tasks", "Projects", "Shopping", "Brain Dump Scanner",
     "Bills & Renewals", "Documents", "Errands & Appointments", "Follow-Up",
     "Travel & Plans", "Home / Flat / Living", "Journal", "Notes", "Archive",
 ]
@@ -28,7 +29,11 @@ GERMAN = {
     "Notes": "Notizen", "Archive": "Archiv", "Finance": "Finanzen", "Recipes": "Rezepte",
     "Focus Timer": "Fokus-Timer", "Voice Brain Dump": "Sprachnotizen", "Unwind": "Ausklang",
     "Settings": "Einstellungen",
+    "Day Planner": "Tagesplaner",
 }
+
+class RemoteChangeBridge(QObject):
+    changed = Signal(str)
 
 
 class MainWindow(QMainWindow):
@@ -37,6 +42,9 @@ class MainWindow(QMainWindow):
     def __init__(self, context: AppContext) -> None:
         super().__init__()
         self.context = context
+        self.remote_bridge = RemoteChangeBridge(self)
+        self.remote_bridge.changed.connect(self._remote_changed)
+        self.context.db.add_listener(self._database_changed)
         self.widgets_by_module: dict[str, QWidget] = {}
         self.nav_rows: dict[int, str] = {}
         self._page_transition: QParallelAnimationGroup | None = None
@@ -99,8 +107,6 @@ class MainWindow(QMainWindow):
         self.apply_theme()
         first_row = next(row for row, name in self.nav_rows.items() if name == "Dashboard")
         self.navigation.setCurrentRow(first_row)
-        if not self.context.journal.completed_today():
-            QTimer.singleShot(500, self._show_journal_reminder)
 
     def _add_section(self, title: str, modules: list[str]) -> None:
         heading = QListWidgetItem(self._translated(title).upper())
@@ -221,21 +227,6 @@ class MainWindow(QMainWindow):
             self._transition_widget = None
             self._page_transition = None
 
-    def _show_journal_reminder(self) -> None:
-        if self.context.journal.completed_today():
-            return
-        reminder = QMessageBox(self)
-        reminder.setWindowTitle("Your daily journal")
-        reminder.setText("A small moment for today")
-        reminder.setInformativeText("Add a few words, a poem, a story, or a drawing. There is no minimum.")
-        open_button = reminder.addButton("Open journal", QMessageBox.AcceptRole)
-        reminder.addButton("Later", QMessageBox.RejectRole)
-        reminder.exec()
-        if reminder.clickedButton() is open_button:
-            row = next((row for row, name in self.nav_rows.items() if name == "Journal"), None)
-            if row is not None:
-                self.navigation.setCurrentRow(row)
-
     def refresh_destination_modules(self, counts: dict[str, int]) -> None:
         destinations = {
             "To-Do": "Tasks", "Reminder Candidate": "Tasks", "Shopping": "Shopping",
@@ -252,6 +243,25 @@ class MainWindow(QMainWindow):
         refresh = getattr(widget, "refresh", None)
         if callable(refresh):
             refresh()
+
+    def _remote_changed(self, domain: str) -> None:
+        mapping = {"tasks":"Tasks", "shopping":"Shopping", "planner":"Day Planner", "projects":"Projects",
+                   "brain_dump":"Brain Dump Scanner", "notes":"Notes", "finance":"Finance", "unwind":"Unwind",
+                   "bills":"Bills & Renewals", "documents":"Documents", "errands":"Errands & Appointments",
+                   "follow_up":"Follow-Up", "travel":"Travel & Plans", "home":"Home / Flat / Living"}
+        module = mapping.get(domain)
+        widget = self.widgets_by_module.get(module) if module else None
+        if widget and hasattr(widget, "request_remote_refresh"):
+            widget.request_remote_refresh()
+        elif module:
+            self.refresh_module(module)
+        board = self.widgets_by_module.get("Dashboard")
+        if board and hasattr(board, "refresh"): board.refresh()
+
+    def _database_changed(self, domain: str, _details: dict) -> None:
+        """Only worker-thread writes are remote; local GUI writes already update their own view."""
+        if threading.current_thread() is not threading.main_thread():
+            self.remote_bridge.changed.emit(domain)
 
     def apply_theme(self) -> None:
         accent = self.context.settings.get("accent_color") or "#ffae82"
@@ -280,4 +290,7 @@ class MainWindow(QMainWindow):
         if callable(board_save):
             board_save()
         self.context.db.write_readable_snapshot()
+        server = getattr(self, "phone_server", None)
+        if server:
+            server.stop()
         super().closeEvent(event)

@@ -3,6 +3,7 @@ from PySide6.QtWidgets import QAbstractItemView, QComboBox, QHBoxLayout, QMessag
 
 from personal_app.app import AppContext
 from personal_app.gui.widgets import Compartment, danger_button, subtle_button
+from personal_app.gui.column_preferences import configure_columns
 
 
 PROJECT_COLUMNS = ["Colour", "Title", "Description", "Category", "Status", "Next Action", "Action Done"]
@@ -31,6 +32,7 @@ class ProjectsPage(Compartment):
         self.table.horizontalHeader().setStretchLastSection(True)
         self.table.verticalHeader().setVisible(False)
         self.table.itemChanged.connect(self._schedule_save)
+        configure_columns(self.table, context, "Projects", PROJECT_COLUMNS)
 
         controls = QHBoxLayout()
         add = QPushButton("Add new")

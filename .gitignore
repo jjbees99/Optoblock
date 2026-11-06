@@ -16,8 +16,10 @@ env/
 # Build outputs
 build/
 build_*/
+build-*/
 dist/
 dist_*/
+dist-*/
 Optoblock-Windows.zip
 
 # OS files
